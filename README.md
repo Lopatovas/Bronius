@@ -98,15 +98,15 @@ Open [http://localhost:3000](http://localhost:3000) to use the UI.
 
 ### Twilio Webhook Setup
 
-For Twilio to reach your local server, use a tunnel (e.g. ngrok):
+Webhook URLs are derived automatically from the request host — no manual configuration needed.
+
+For local development, Twilio needs to reach your machine. Use a tunnel (e.g. ngrok):
 
 ```bash
 ngrok http 3000
 ```
 
-Set `TWILIO_WEBHOOK_BASE_URL` in `.env` to your ngrok URL (e.g. `https://abc123.ngrok.io`).
-
-Twilio will automatically use the webhook URLs configured when placing the call — no manual webhook configuration in the Twilio console is needed.
+Then open the ngrok URL in your browser instead of `localhost:3000`. The app will use the incoming request's host to build webhook URLs for Twilio.
 
 ## Running Tests
 
@@ -157,7 +157,6 @@ To add a new provider, implement the corresponding port interface and register i
 | `TWILIO_API_KEY` | Twilio API Key SID (starts with `SK`) | — |
 | `TWILIO_API_SECRET` | Twilio API Key Secret | — |
 | `TWILIO_PHONE_NUMBER` | Twilio phone number (E.164) | — |
-| `TWILIO_WEBHOOK_BASE_URL` | Public URL for webhooks | — |
 | `BRAIN_PROVIDER` | `openai` or `mock` | `mock` |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `SUPABASE_URL` | Supabase project URL | (in-memory) |

@@ -69,7 +69,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     }
     if (!params.webhookBaseUrl) {
       throw new Error(
-        'Webhook base URL not configured. Set TWILIO_WEBHOOK_BASE_URL environment variable.',
+        'Webhook base URL could not be determined from the request.',
       );
     }
 

@@ -34,7 +34,6 @@ describe('Idempotent Event Handling', () => {
     const transcript = new TranscriptService(store);
     const config: CallControllerConfig = {
       fromNumber: '+15551234567',
-      webhookBaseUrl: 'https://example.com',
       maxCallDurationSec: 300,
       maxSilenceRetries: 2,
     };
@@ -42,7 +41,7 @@ describe('Idempotent Event Handling', () => {
   });
 
   it('should handle duplicate ringing events idempotently', async () => {
-    await controller.initiateCall('dup-1', '+14155552671');
+    await controller.initiateCall('dup-1', '+14155552671', 'https://example.com');
 
     const event: NormalizedProviderEvent = {
       type: 'ringing',
@@ -60,7 +59,7 @@ describe('Idempotent Event Handling', () => {
   });
 
   it('should handle duplicate answered events without error', async () => {
-    await controller.initiateCall('dup-2', '+14155552671');
+    await controller.initiateCall('dup-2', '+14155552671', 'https://example.com');
 
     await controller.handleProviderEvent(
       { type: 'answered', providerCallId: 'p-2', timestamp: new Date() },
@@ -78,7 +77,7 @@ describe('Idempotent Event Handling', () => {
   });
 
   it('should not regress status on out-of-order events', async () => {
-    await controller.initiateCall('dup-3', '+14155552671');
+    await controller.initiateCall('dup-3', '+14155552671', 'https://example.com');
 
     await controller.handleProviderEvent(
       { type: 'answered', providerCallId: 'p-3', timestamp: new Date() },

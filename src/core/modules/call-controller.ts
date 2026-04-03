@@ -9,7 +9,6 @@ import { log } from '../../lib/logger';
 
 export interface CallControllerConfig {
   fromNumber: string;
-  webhookBaseUrl: string;
   maxCallDurationSec: number;
   maxSilenceRetries: number;
 }
@@ -25,7 +24,7 @@ export class CallController {
     private config: CallControllerConfig,
   ) {}
 
-  async initiateCall(callSessionId: string, toNumber: string): Promise<CallSession> {
+  async initiateCall(callSessionId: string, toNumber: string, webhookBaseUrl: string): Promise<CallSession> {
     const session = await this.store.createSession({ id: callSessionId, toNumber });
     log.info({ callSessionId }, 'Call session created');
 
@@ -36,7 +35,7 @@ export class CallController {
         toNumber,
         fromNumber: this.config.fromNumber,
         callSessionId,
-        webhookBaseUrl: this.config.webhookBaseUrl,
+        webhookBaseUrl,
       });
 
       await this.store.updateStatus(callSessionId, 'DIALING', { providerCallId });

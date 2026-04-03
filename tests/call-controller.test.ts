@@ -53,10 +53,11 @@ describe('CallController', () => {
 
   const config: CallControllerConfig = {
     fromNumber: '+15551234567',
-    webhookBaseUrl: 'https://example.com',
     maxCallDurationSec: 300,
     maxSilenceRetries: 2,
   };
+
+  const testBaseUrl = 'https://example.com';
 
   beforeEach(() => {
     store = new InMemoryCallStoreAdapter();
@@ -68,13 +69,13 @@ describe('CallController', () => {
   });
 
   it('should create a session and transition to DIALING on initiateCall', async () => {
-    const session = await controller.initiateCall('sess-1', '+14155552671');
+    const session = await controller.initiateCall('sess-1', '+14155552671', testBaseUrl);
     expect(session.status).toBe('DIALING');
     expect(session.providerCallId).toBe('provider-call-123');
   });
 
   it('should transition INIT -> DIALING -> RINGING -> CONNECTED', async () => {
-    await controller.initiateCall('sess-2', '+14155552671');
+    await controller.initiateCall('sess-2', '+14155552671', testBaseUrl);
 
     await controller.handleProviderEvent(
       { type: 'ringing', providerCallId: 'p-1', timestamp: new Date() },
@@ -92,7 +93,7 @@ describe('CallController', () => {
   });
 
   it('should handle DIALING -> CONNECTED directly (skip RINGING)', async () => {
-    await controller.initiateCall('sess-skip', '+14155552671');
+    await controller.initiateCall('sess-skip', '+14155552671', testBaseUrl);
 
     await controller.handleProviderEvent(
       { type: 'answered', providerCallId: 'p-1', timestamp: new Date() },
@@ -103,7 +104,7 @@ describe('CallController', () => {
   });
 
   it('should transition to FAILED on busy', async () => {
-    await controller.initiateCall('sess-3', '+14155552671');
+    await controller.initiateCall('sess-3', '+14155552671', testBaseUrl);
 
     await controller.handleProviderEvent(
       { type: 'busy', providerCallId: 'p-1', timestamp: new Date() },
@@ -115,7 +116,7 @@ describe('CallController', () => {
   });
 
   it('should transition to FAILED on no-answer', async () => {
-    await controller.initiateCall('sess-na', '+14155552671');
+    await controller.initiateCall('sess-na', '+14155552671', testBaseUrl);
 
     await controller.handleProviderEvent(
       { type: 'no-answer', providerCallId: 'p-1', timestamp: new Date() },
@@ -134,7 +135,7 @@ describe('CallController', () => {
   });
 
   it('should handle silence with retries', async () => {
-    await controller.initiateCall('sess-5', '+14155552671');
+    await controller.initiateCall('sess-5', '+14155552671', testBaseUrl);
     await controller.transitionStatus('sess-5', 'CONNECTED');
     await controller.transitionStatus('sess-5', 'GREETING');
     await controller.transitionStatus('sess-5', 'LISTENING');
@@ -152,7 +153,7 @@ describe('CallController', () => {
   });
 
   it('should process speech and return agent reply', async () => {
-    await controller.initiateCall('sess-6', '+14155552671');
+    await controller.initiateCall('sess-6', '+14155552671', testBaseUrl);
     await controller.transitionStatus('sess-6', 'CONNECTED');
     await controller.transitionStatus('sess-6', 'GREETING');
 
@@ -168,7 +169,7 @@ describe('CallController', () => {
   });
 
   it('should handle goodbye from user and end call', async () => {
-    await controller.initiateCall('sess-7', '+14155552671');
+    await controller.initiateCall('sess-7', '+14155552671', testBaseUrl);
     await controller.transitionStatus('sess-7', 'CONNECTED');
     await controller.transitionStatus('sess-7', 'GREETING');
 
@@ -178,7 +179,7 @@ describe('CallController', () => {
   });
 
   it('should not transition to an invalid status', async () => {
-    await controller.initiateCall('sess-inv', '+14155552671');
+    await controller.initiateCall('sess-inv', '+14155552671', testBaseUrl);
 
     const session = await controller.transitionStatus('sess-inv', 'LISTENING');
     expect(session.status).toBe('DIALING');

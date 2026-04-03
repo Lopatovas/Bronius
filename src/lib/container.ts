@@ -29,7 +29,6 @@ export async function getCallController(): Promise<CallController> {
 
     const controllerConfig: CallControllerConfig = {
       fromNumber: config.twilioPhoneNumber || '',
-      webhookBaseUrl: config.twilioWebhookBaseUrl || '',
       maxCallDurationSec: config.maxCallDurationSec,
       maxSilenceRetries: config.maxSilenceRetries,
     };

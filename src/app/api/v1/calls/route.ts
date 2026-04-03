@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { startCallSchema } from '@/lib/validation';
 import { generateId } from '@/lib/id';
-import { getCallController, getProviders } from '@/lib/container';
+import { getCallController } from '@/lib/container';
 import { log } from '@/lib/logger';
+import { resolveBaseUrl } from '@/lib/base-url';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,10 +18,11 @@ export async function POST(req: NextRequest) {
     }
 
     const callSessionId = generateId();
+    const webhookBaseUrl = resolveBaseUrl(req);
     const controller = await getCallController();
-    const session = await controller.initiateCall(callSessionId, parsed.data.toNumber);
+    const session = await controller.initiateCall(callSessionId, parsed.data.toNumber, webhookBaseUrl);
 
-    log.info({ callSessionId }, 'Call initiated via API');
+    log.info({ callSessionId, webhookBaseUrl }, 'Call initiated via API');
 
     return NextResponse.json({ callSessionId: session.id, session }, { status: 201 });
   } catch (err) {

@@ -117,7 +117,7 @@ describe('Webhook Normalization', () => {
         callSessionId: 'test-123',
         webhookBaseUrl: '',
       }),
-    ).rejects.toThrow('TWILIO_WEBHOOK_BASE_URL');
+    ).rejects.toThrow('Webhook base URL');
   });
 });
 

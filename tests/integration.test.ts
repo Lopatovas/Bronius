@@ -34,7 +34,6 @@ describe('Integration: Full Call Flow', () => {
     const transcript = new TranscriptService(store);
     const config: CallControllerConfig = {
       fromNumber: '+15551234567',
-      webhookBaseUrl: 'https://example.com',
       maxCallDurationSec: 300,
       maxSilenceRetries: 2,
     };
@@ -43,7 +42,7 @@ describe('Integration: Full Call Flow', () => {
 
   it('should run full flow: start -> answered -> gather -> reply -> close', async () => {
     // 1. Start call
-    const session = await controller.initiateCall('int-1', '+14155552671');
+    const session = await controller.initiateCall('int-1', '+14155552671', 'https://example.com');
     expect(session.status).toBe('DIALING');
 
     // 2. Simulate answered
@@ -107,7 +106,7 @@ describe('Integration: Full Call Flow', () => {
   });
 
   it('should handle call failure gracefully and preserve partial transcript', async () => {
-    await controller.initiateCall('int-fail', '+14155552671');
+    await controller.initiateCall('int-fail', '+14155552671', 'https://example.com');
 
     await controller.handleProviderEvent(
       { type: 'answered', providerCallId: 'int-p-fail', timestamp: new Date() },

@@ -10,7 +10,6 @@ export interface ProviderConfig {
   twilioApiKey?: string;
   twilioApiSecret?: string;
   twilioPhoneNumber?: string;
-  twilioWebhookBaseUrl?: string;
   openaiApiKey?: string;
   supabaseUrl?: string;
   supabaseServiceKey?: string;
@@ -36,7 +35,6 @@ export function loadConfigFromEnv(): ProviderConfig {
     twilioApiKey: process.env.TWILIO_API_KEY,
     twilioApiSecret: process.env.TWILIO_API_SECRET,
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER,
-    twilioWebhookBaseUrl: process.env.TWILIO_WEBHOOK_BASE_URL,
     openaiApiKey: process.env.OPENAI_API_KEY,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
