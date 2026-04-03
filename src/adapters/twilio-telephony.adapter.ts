@@ -5,21 +5,26 @@ import { NormalizedProviderEvent } from '../core/domain/events';
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
 export class TwilioTelephonyAdapter implements TelephonyPort {
-  private client: twilio.Twilio;
+  private client: twilio.Twilio | null = null;
 
   constructor(
     private accountSid: string,
     private authToken: string,
-  ) {
-    this.client = twilio(accountSid, authToken);
-  }
+  ) {}
 
-  async placeCall(params: PlaceCallParams): Promise<PlaceCallResult> {
+  private getClient(): twilio.Twilio {
     if (!this.accountSid || !this.authToken) {
       throw new Error(
         'Twilio credentials not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.',
       );
     }
+    if (!this.client) {
+      this.client = twilio(this.accountSid, this.authToken);
+    }
+    return this.client;
+  }
+
+  async placeCall(params: PlaceCallParams): Promise<PlaceCallResult> {
     if (!params.fromNumber) {
       throw new Error(
         'Twilio phone number not configured. Set TWILIO_PHONE_NUMBER environment variable.',
@@ -31,8 +36,10 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
       );
     }
 
+    const client = this.getClient();
+
     try {
-      const call = await this.client.calls.create({
+      const call = await client.calls.create({
         to: params.toNumber,
         from: params.fromNumber,
         url: `${params.webhookBaseUrl}/api/v1/telephony/voice?callSessionId=${params.callSessionId}`,
@@ -49,13 +56,14 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
         `Twilio API error: ${twilioErr.message || 'Unknown error'}` +
         (twilioErr.code ? ` (code: ${twilioErr.code})` : '') +
         (twilioErr.status ? ` (status: ${twilioErr.status})` : '') +
-        (twilioErr.moreInfo ? ` — ${twilioErr.moreInfo}` : ''),
+        (twilioErr.moreInfo ? ` — see ${twilioErr.moreInfo}` : ''),
       );
     }
   }
 
   async hangupCall(providerCallId: string): Promise<void> {
-    await this.client.calls(providerCallId).update({ status: 'completed' });
+    const client = this.getClient();
+    await client.calls(providerCallId).update({ status: 'completed' });
   }
 
   normalizeProviderEvent(raw: Record<string, string>): NormalizedProviderEvent {

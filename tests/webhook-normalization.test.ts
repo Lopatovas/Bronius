@@ -85,4 +85,38 @@ describe('Webhook Normalization', () => {
     expect(event.type).toBe('failed');
     expect(event.providerCallId).toBe('');
   });
+
+  it('should throw clear error when credentials are empty', async () => {
+    const noCredAdapter = new TwilioTelephonyAdapter('', '');
+    await expect(
+      noCredAdapter.placeCall({
+        toNumber: '+14155552671',
+        fromNumber: '+15551234567',
+        callSessionId: 'test-123',
+        webhookBaseUrl: 'https://example.com',
+      }),
+    ).rejects.toThrow('TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN');
+  });
+
+  it('should throw clear error when fromNumber is empty', async () => {
+    await expect(
+      adapter.placeCall({
+        toNumber: '+14155552671',
+        fromNumber: '',
+        callSessionId: 'test-123',
+        webhookBaseUrl: 'https://example.com',
+      }),
+    ).rejects.toThrow('TWILIO_PHONE_NUMBER');
+  });
+
+  it('should throw clear error when webhookBaseUrl is empty', async () => {
+    await expect(
+      adapter.placeCall({
+        toNumber: '+14155552671',
+        fromNumber: '+15551234567',
+        callSessionId: 'test-123',
+        webhookBaseUrl: '',
+      }),
+    ).rejects.toThrow('TWILIO_WEBHOOK_BASE_URL');
+  });
 });
