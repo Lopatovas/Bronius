@@ -14,7 +14,20 @@ export async function POST(req: NextRequest) {
     const controller = await getCallController();
     const providers = await getProviders();
 
-    await controller.transitionStatus(callSessionId, 'GREETING');
+    const session = await providers.callStore.getSession(callSessionId);
+    if (!session) {
+      log.error({ callSessionId }, 'Session not found in voice webhook');
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+
+    if (session.status === 'DIALING' || session.status === 'RINGING') {
+      await controller.transitionStatus(callSessionId, 'CONNECTED', {
+        startedAt: new Date(),
+      });
+    }
+    if (session.status !== 'GREETING') {
+      await controller.transitionStatus(callSessionId, 'GREETING');
+    }
 
     const actions = controller.generateGreeting(callSessionId);
     const twiml = providers.telephony.respondWithVoiceActions(actions);
@@ -31,6 +44,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     log.error({ err }, 'Error processing voice webhook');
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const fallbackTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Goodbye.</Say><Hangup/></Response>';
+    return new NextResponse(fallbackTwiml, {
+      status: 200,
+      headers: { 'Content-Type': 'text/xml' },
+    });
   }
 }

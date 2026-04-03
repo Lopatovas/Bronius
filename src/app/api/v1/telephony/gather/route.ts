@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     log.error({ err }, 'Error processing gather webhook');
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const fallbackTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Goodbye.</Say><Hangup/></Response>';
+    return new NextResponse(fallbackTwiml, {
+      status: 200,
+      headers: { 'Content-Type': 'text/xml' },
+    });
   }
 }

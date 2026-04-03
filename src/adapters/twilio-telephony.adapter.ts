@@ -76,15 +76,17 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     const voiceUrl = `${params.webhookBaseUrl}/api/v1/telephony/voice?callSessionId=${params.callSessionId}`;
     const statusUrl = `${params.webhookBaseUrl}/api/v1/telephony/events?callSessionId=${params.callSessionId}`;
 
-    const body = new URLSearchParams({
-      To: params.toNumber,
-      From: params.fromNumber,
-      Url: voiceUrl,
-      Method: 'POST',
-      StatusCallback: statusUrl,
-      StatusCallbackMethod: 'POST',
-      StatusCallbackEvent: 'initiated ringing answered completed',
-    });
+    const body = new URLSearchParams();
+    body.append('To', params.toNumber);
+    body.append('From', params.fromNumber);
+    body.append('Url', voiceUrl);
+    body.append('Method', 'POST');
+    body.append('StatusCallback', statusUrl);
+    body.append('StatusCallbackMethod', 'POST');
+    body.append('StatusCallbackEvent', 'initiated');
+    body.append('StatusCallbackEvent', 'ringing');
+    body.append('StatusCallbackEvent', 'answered');
+    body.append('StatusCallbackEvent', 'completed');
 
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}/Calls.json`;
 
