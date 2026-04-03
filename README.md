@@ -28,7 +28,7 @@ A TypeScript proof-of-concept for AI-powered outbound phone calls. Built with a 
 ├───────────────────────────────────────────────────────────────────┤
 │                    Adapters (Implementations)                     │
 │  ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │
-│  │ Twilio    │ │ OpenAI   │ │ Postgres │ │ InMemory         │   │
+│  │ Twilio    │ │ OpenAI   │ │ Supabase │ │ InMemory         │   │
 │  │ Telephony │ │ Brain    │ │ CallStore│ │ CallStore        │   │
 │  └───────────┘ └──────────┘ └──────────┘ └──────────────────┘   │
 │                ┌──────────┐                                      │
@@ -65,7 +65,7 @@ Any non-terminal state ───────────────────
 - Node.js 18+
 - Twilio account (for real calls)
 - OpenAI API key (optional, mock brain is default)
-- PostgreSQL (optional, in-memory store is default)
+- Supabase project (optional, in-memory store is default)
 
 ### Installation
 
@@ -75,13 +75,18 @@ cp .env.example .env
 # Edit .env with your credentials
 ```
 
-### Database Setup (optional)
+### Supabase Setup (optional)
 
-If using PostgreSQL, set `DATABASE_URL` in `.env` and run:
+1. Create a project at [supabase.com](https://supabase.com)
+2. Go to **SQL Editor** in the Supabase dashboard
+3. Paste and run the contents of `db/schema.sql`
+4. Copy your project URL and service role key into `.env`:
+   ```
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJI...
+   ```
 
-```bash
-npm run db:migrate
-```
+Without these variables, the app uses an in-memory store (data lost on restart).
 
 ### Running Locally
 
@@ -134,11 +139,12 @@ OPENAI_API_KEY=sk-...
 ### Storage
 
 ```bash
-# In-memory (default when DATABASE_URL is not set)
+# In-memory (default when SUPABASE_URL is not set)
 # No configuration needed
 
-# PostgreSQL
-DATABASE_URL=postgresql://user:pass@localhost:5432/bronius
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJI...
 ```
 
 To add a new provider, implement the corresponding port interface and register it in `provider-registry.ts`.
@@ -153,7 +159,8 @@ To add a new provider, implement the corresponding port interface and register i
 | `TWILIO_WEBHOOK_BASE_URL` | Public URL for webhooks | — |
 | `BRAIN_PROVIDER` | `openai` or `mock` | `mock` |
 | `OPENAI_API_KEY` | OpenAI API key | — |
-| `DATABASE_URL` | PostgreSQL connection string | (in-memory) |
+| `SUPABASE_URL` | Supabase project URL | (in-memory) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | (in-memory) |
 | `MAX_TURNS` | Max conversation turns | `10` |
 | `MAX_CALL_DURATION_SEC` | Max call duration | `300` |
 | `MAX_SILENCE_RETRIES` | Retries on silence before hangup | `2` |
@@ -167,7 +174,7 @@ src/
 │   ├── openai-brain.adapter.ts
 │   ├── mock-brain.adapter.ts
 │   ├── in-memory-call-store.adapter.ts
-│   └── postgres-call-store.adapter.ts
+│   └── supabase-call-store.adapter.ts
 ├── core/
 │   ├── domain/                  # Domain types, events, state machine
 │   │   ├── types.ts
@@ -212,5 +219,5 @@ tests/
 ├── idempotency.test.ts
 └── integration.test.ts
 db/
-└── migrate.ts                   # PostgreSQL schema migration
+└── schema.sql                   # Supabase schema (run in SQL Editor)
 ```

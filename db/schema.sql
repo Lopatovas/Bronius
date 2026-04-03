@@ -1,6 +1,5 @@
-import { Pool } from 'pg';
+-- Run this in your Supabase SQL Editor (Dashboard > SQL Editor > New query)
 
-const MIGRATION_SQL = `
 CREATE TABLE IF NOT EXISTS call_sessions (
   id UUID PRIMARY KEY,
   to_number VARCHAR(20) NOT NULL,
@@ -27,26 +26,7 @@ CREATE TABLE IF NOT EXISTS call_turns (
 CREATE INDEX IF NOT EXISTS idx_call_turns_session_id ON call_turns(call_session_id);
 CREATE INDEX IF NOT EXISTS idx_call_turns_ordering ON call_turns(call_session_id, turn_index);
 CREATE INDEX IF NOT EXISTS idx_call_sessions_status ON call_sessions(status);
-`;
 
-async function migrate() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.error('DATABASE_URL is not set');
-    process.exit(1);
-  }
-
-  const pool = new Pool({ connectionString: databaseUrl });
-  try {
-    console.log('Running migration...');
-    await pool.query(MIGRATION_SQL);
-    console.log('Migration completed successfully');
-  } catch (err) {
-    console.error('Migration failed:', err);
-    process.exit(1);
-  } finally {
-    await pool.end();
-  }
-}
-
-migrate();
+-- Enable Row Level Security (service role key bypasses RLS)
+ALTER TABLE call_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE call_turns ENABLE ROW LEVEL SECURITY;

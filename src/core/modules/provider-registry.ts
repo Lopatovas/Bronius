@@ -11,7 +11,8 @@ export interface ProviderConfig {
   twilioPhoneNumber?: string;
   twilioWebhookBaseUrl?: string;
   openaiApiKey?: string;
-  databaseUrl?: string;
+  supabaseUrl?: string;
+  supabaseServiceKey?: string;
   maxTurns: number;
   maxCallDurationSec: number;
   maxSilenceRetries: number;
@@ -35,7 +36,8 @@ export function loadConfigFromEnv(): ProviderConfig {
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER,
     twilioWebhookBaseUrl: process.env.TWILIO_WEBHOOK_BASE_URL,
     openaiApiKey: process.env.OPENAI_API_KEY,
-    databaseUrl: process.env.DATABASE_URL,
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     maxTurns: parseInt(process.env.MAX_TURNS || '10', 10),
     maxCallDurationSec: parseInt(process.env.MAX_CALL_DURATION_SEC || '300', 10),
     maxSilenceRetries: parseInt(process.env.MAX_SILENCE_RETRIES || '2', 10),
@@ -58,9 +60,9 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
   }
 
   let callStore: CallStorePort;
-  if (config.databaseUrl) {
-    const { PostgresCallStoreAdapter } = await import('../../adapters/postgres-call-store.adapter');
-    callStore = new PostgresCallStoreAdapter(config.databaseUrl);
+  if (config.supabaseUrl && config.supabaseServiceKey) {
+    const { SupabaseCallStoreAdapter } = await import('../../adapters/supabase-call-store.adapter');
+    callStore = new SupabaseCallStoreAdapter(config.supabaseUrl, config.supabaseServiceKey);
   } else {
     callStore = new InMemoryCallStoreAdapter();
   }
