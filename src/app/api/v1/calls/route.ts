@@ -1,0 +1,30 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { startCallSchema } from '@/lib/validation';
+import { generateId } from '@/lib/id';
+import { getCallController, getProviders } from '@/lib/container';
+import { log } from '@/lib/logger';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const parsed = startCallSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      );
+    }
+
+    const callSessionId = generateId();
+    const controller = await getCallController();
+    const session = await controller.initiateCall(callSessionId, parsed.data.toNumber);
+
+    log.info({ callSessionId }, 'Call initiated via API');
+
+    return NextResponse.json({ callSessionId: session.id, session }, { status: 201 });
+  } catch (err) {
+    log.error({ err }, 'Failed to initiate call');
+    return NextResponse.json({ error: 'Failed to initiate call' }, { status: 500 });
+  }
+}
