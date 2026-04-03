@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ callSessionId: session.id, session }, { status: 201 });
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
     log.error({ err }, 'Failed to initiate call');
-    return NextResponse.json({ error: 'Failed to initiate call' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

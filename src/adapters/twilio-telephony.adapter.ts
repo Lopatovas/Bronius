@@ -15,17 +15,43 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
   }
 
   async placeCall(params: PlaceCallParams): Promise<PlaceCallResult> {
-    const call = await this.client.calls.create({
-      to: params.toNumber,
-      from: params.fromNumber,
-      url: `${params.webhookBaseUrl}/api/v1/telephony/voice?callSessionId=${params.callSessionId}`,
-      statusCallback: `${params.webhookBaseUrl}/api/v1/telephony/events?callSessionId=${params.callSessionId}`,
-      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-      statusCallbackMethod: 'POST',
-      method: 'POST',
-    });
+    if (!this.accountSid || !this.authToken) {
+      throw new Error(
+        'Twilio credentials not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.',
+      );
+    }
+    if (!params.fromNumber) {
+      throw new Error(
+        'Twilio phone number not configured. Set TWILIO_PHONE_NUMBER environment variable.',
+      );
+    }
+    if (!params.webhookBaseUrl) {
+      throw new Error(
+        'Webhook base URL not configured. Set TWILIO_WEBHOOK_BASE_URL environment variable.',
+      );
+    }
 
-    return { providerCallId: call.sid };
+    try {
+      const call = await this.client.calls.create({
+        to: params.toNumber,
+        from: params.fromNumber,
+        url: `${params.webhookBaseUrl}/api/v1/telephony/voice?callSessionId=${params.callSessionId}`,
+        statusCallback: `${params.webhookBaseUrl}/api/v1/telephony/events?callSessionId=${params.callSessionId}`,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+        method: 'POST',
+      });
+
+      return { providerCallId: call.sid };
+    } catch (err: unknown) {
+      const twilioErr = err as { message?: string; code?: number; status?: number; moreInfo?: string };
+      throw new Error(
+        `Twilio API error: ${twilioErr.message || 'Unknown error'}` +
+        (twilioErr.code ? ` (code: ${twilioErr.code})` : '') +
+        (twilioErr.status ? ` (status: ${twilioErr.status})` : '') +
+        (twilioErr.moreInfo ? ` — ${twilioErr.moreInfo}` : ''),
+      );
+    }
   }
 
   async hangupCall(providerCallId: string): Promise<void> {

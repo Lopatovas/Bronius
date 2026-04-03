@@ -5,12 +5,30 @@ interface LogContext {
   [key: string]: unknown;
 }
 
+function serializeValue(v: unknown): string {
+  if (v instanceof Error) {
+    const obj: Record<string, unknown> = {
+      message: v.message,
+      name: v.name,
+    };
+    if (v.stack) obj.stack = v.stack.split('\n').slice(0, 5).join('\n');
+    if ('code' in v) obj.code = (v as Record<string, unknown>).code;
+    if ('status' in v) obj.status = (v as Record<string, unknown>).status;
+    if ('moreInfo' in v) obj.moreInfo = (v as Record<string, unknown>).moreInfo;
+    return JSON.stringify(obj);
+  }
+  if (typeof v === 'object' && v !== null) {
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
 function formatMessage(level: LogLevel, context: LogContext, message: string): string {
   const timestamp = new Date().toISOString();
   const sessionTag = context.callSessionId ? ` [session:${context.callSessionId}]` : '';
   const extra = Object.entries(context)
     .filter(([k]) => k !== 'callSessionId')
-    .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
+    .map(([k, v]) => `${k}=${serializeValue(v)}`)
     .join(' ');
   return `${timestamp} ${level.toUpperCase()}${sessionTag} ${message}${extra ? ' ' + extra : ''}`;
 }
