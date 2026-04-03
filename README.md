@@ -154,7 +154,8 @@ To add a new provider, implement the corresponding port interface and register i
 | Variable | Description | Default |
 |---|---|---|
 | `TWILIO_ACCOUNT_SID` | Twilio Account SID | — |
-| `TWILIO_AUTH_TOKEN` | Twilio Auth Token | — |
+| `TWILIO_API_KEY` | Twilio API Key SID (starts with `SK`) | — |
+| `TWILIO_API_SECRET` | Twilio API Key Secret | — |
 | `TWILIO_PHONE_NUMBER` | Twilio phone number (E.164) | — |
 | `TWILIO_WEBHOOK_BASE_URL` | Public URL for webhooks | — |
 | `BRAIN_PROVIDER` | `openai` or `mock` | `mock` |

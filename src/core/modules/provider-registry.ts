@@ -7,7 +7,8 @@ import { TTSPort } from '../ports/tts.port';
 export interface ProviderConfig {
   brainProvider: 'openai' | 'mock';
   twilioAccountSid?: string;
-  twilioAuthToken?: string;
+  twilioApiKey?: string;
+  twilioApiSecret?: string;
   twilioPhoneNumber?: string;
   twilioWebhookBaseUrl?: string;
   openaiApiKey?: string;
@@ -32,7 +33,8 @@ export function loadConfigFromEnv(): ProviderConfig {
   return {
     brainProvider: (process.env.BRAIN_PROVIDER as 'openai' | 'mock') || 'mock',
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
-    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
+    twilioApiKey: process.env.TWILIO_API_KEY,
+    twilioApiSecret: process.env.TWILIO_API_SECRET,
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER,
     twilioWebhookBaseUrl: process.env.TWILIO_WEBHOOK_BASE_URL,
     openaiApiKey: process.env.OPENAI_API_KEY,
@@ -69,7 +71,8 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
 
   const telephony = new TwilioTelephonyAdapter(
     config.twilioAccountSid || '',
-    config.twilioAuthToken || '',
+    config.twilioApiKey || '',
+    config.twilioApiSecret || '',
   );
 
   cachedProviders = { telephony, brain, callStore };
