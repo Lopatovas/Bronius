@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const OPEN_PATHS = ['/api/v1/telephony/'];
+const OPEN_PATHS = ['/api/v1/telephony/', '/login', '/api/auth/login'];
 
 export function middleware(req: NextRequest) {
   const password = process.env.APP_PASSWORD;
