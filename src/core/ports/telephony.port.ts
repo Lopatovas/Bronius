@@ -20,6 +20,7 @@ export interface VoiceAction {
     speechTimeout?: string;
     timeout?: number;
     actionPath: string;
+    actionOnEmptyResult?: boolean;
   };
   length?: number;
 }

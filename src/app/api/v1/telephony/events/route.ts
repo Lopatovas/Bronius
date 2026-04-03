@@ -49,6 +49,6 @@ export async function POST(req: NextRequest) {
     return new NextResponse('OK', { status: 200 });
   } catch (err) {
     log.error({ err }, 'Error processing telephony event');
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return new NextResponse('OK', { status: 200 });
   }
 }

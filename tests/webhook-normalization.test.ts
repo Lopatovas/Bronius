@@ -150,7 +150,7 @@ describe('TwiML Generation', () => {
     expect(twiml).toContain('<Gather');
     expect(twiml).toContain('input="speech"');
     expect(twiml).toContain('speechTimeout="auto"');
-    expect(twiml).toContain('</Gather>');
+    expect(twiml).toContain('<Gather');
   });
 
   it('should generate Hangup TwiML', () => {

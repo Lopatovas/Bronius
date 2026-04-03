@@ -107,6 +107,7 @@ export class CallController {
           speechTimeout: 'auto',
           timeout: 5,
           actionPath: `/api/v1/telephony/gather?callSessionId=${callSessionId}`,
+          actionOnEmptyResult: true,
         },
       },
     ];
@@ -159,6 +160,7 @@ export class CallController {
             speechTimeout: 'auto',
             timeout: 5,
             actionPath: `/api/v1/telephony/gather?callSessionId=${callSessionId}`,
+            actionOnEmptyResult: true,
           },
         },
       ];
@@ -188,6 +190,7 @@ export class CallController {
           speechTimeout: 'auto',
           timeout: 5,
           actionPath: `/api/v1/telephony/gather?callSessionId=${callSessionId}`,
+          actionOnEmptyResult: true,
         },
       },
     ];

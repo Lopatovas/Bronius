@@ -23,9 +23,8 @@ function buildTwiml(actions: VoiceAction[]): string {
       case 'gather': {
         const opts = action.gatherOptions;
         if (opts) {
-          body += `<Gather input="${opts.input}" speechTimeout="${opts.speechTimeout || 'auto'}" timeout="${opts.timeout || 5}" action="${escapeXml(opts.actionPath)}" method="POST">`;
-          body += `<Say voice="Polly.Amy"> </Say>`;
-          body += `</Gather>`;
+          const actionOnEmpty = opts.actionOnEmptyResult ? ' actionOnEmptyResult="true"' : '';
+          body += `<Gather input="${opts.input}" speechTimeout="${opts.speechTimeout || 'auto'}" timeout="${opts.timeout || 5}" action="${escapeXml(opts.actionPath)}" method="POST"${actionOnEmpty}/>`;
         }
         break;
       }
