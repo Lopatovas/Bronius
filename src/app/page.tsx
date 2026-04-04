@@ -456,10 +456,13 @@ export default function Home() {
               </button>
             </div>
           </div>
-          <p style={{ color: '#64748b', fontSize: 12, marginTop: 0, marginBottom: 12 }}>
-            Twilio REST calls, webhook payloads, TwiML responses, LLM requests/replies, and API activity
-            (in-memory on this server; set <code style={{ color: '#94a3b8' }}>INTEGRATION_TRACE=0</code> to
-            disable).
+          <p style={{ color: '#64748b', fontSize: 12, marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
+            Twilio REST calls, webhook payloads, TwiML responses, LLM requests/replies, and API activity.
+            The buffer is <strong style={{ color: '#94a3b8' }}>in-memory per server instance</strong> — on
+            Vercel/serverless, voice and gather webhooks often hit a different instance than this page, so
+            those lines may be missing here even when Twilio delivered them (check Twilio Debugger and
+            deployment logs). Set <code style={{ color: '#94a3b8' }}>INTEGRATION_TRACE=0</code> to disable
+            tracing.
           </p>
           <div
             style={{

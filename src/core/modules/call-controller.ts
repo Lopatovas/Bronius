@@ -53,6 +53,9 @@ export class CallController {
     log.info({ callSessionId, eventType: event.type, providerCallId: event.providerCallId }, 'Provider event received');
 
     switch (event.type) {
+      case 'initiated':
+      case 'queued':
+        break;
       case 'ringing':
         await this.transitionStatus(callSessionId, 'RINGING', {
           providerCallId: event.providerCallId,

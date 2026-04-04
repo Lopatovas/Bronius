@@ -5,6 +5,16 @@ import { pushIntegrationTrace } from '../lib/integration-trace';
 
 const TWILIO_API_BASE = 'https://api.twilio.com/2010-04-01';
 
+/** Preserves repeated keys (e.g. multiple StatusCallbackEvent) for trace logs. */
+function urlSearchParamsForTrace(params: URLSearchParams): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  for (const key of new Set(params.keys())) {
+    const all = params.getAll(key);
+    out[key] = all.length === 1 ? all[0]! : all;
+  }
+  return out;
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -98,7 +108,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
       meta: {
         url,
         method: 'POST',
-        form: Object.fromEntries(body),
+        form: urlSearchParamsForTrace(body),
       },
     });
 
@@ -235,6 +245,8 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     const providerCallId = raw.CallSid || '';
 
     const typeMap: Record<string, NormalizedProviderEvent['type']> = {
+      initiated: 'initiated',
+      queued: 'queued',
       ringing: 'ringing',
       'in-progress': 'answered',
       completed: 'completed',

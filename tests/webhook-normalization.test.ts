@@ -4,6 +4,23 @@ import { TwilioTelephonyAdapter } from '@/adapters/twilio-telephony.adapter';
 describe('Webhook Normalization', () => {
   const adapter = new TwilioTelephonyAdapter('AC_test', 'SK_test', 'secret_test');
 
+  it('should normalize initiated status (Twilio progress callback)', () => {
+    const event = adapter.normalizeProviderEvent({
+      CallStatus: 'initiated',
+      CallSid: 'CA_init',
+    });
+    expect(event.type).toBe('initiated');
+    expect(event.providerCallId).toBe('CA_init');
+  });
+
+  it('should normalize queued status', () => {
+    const event = adapter.normalizeProviderEvent({
+      CallStatus: 'queued',
+      CallSid: 'CA_q',
+    });
+    expect(event.type).toBe('queued');
+  });
+
   it('should normalize ringing status', () => {
     const event = adapter.normalizeProviderEvent({
       CallStatus: 'ringing',

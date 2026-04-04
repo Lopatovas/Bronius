@@ -14,7 +14,11 @@ class StubTelephonyAdapter implements TelephonyPort {
   async hangupCall(): Promise<void> {}
   normalizeProviderEvent(raw: Record<string, string>): NormalizedProviderEvent {
     const map: Record<string, NormalizedProviderEvent['type']> = {
-      ringing: 'ringing', 'in-progress': 'answered', completed: 'completed',
+      initiated: 'initiated',
+      queued: 'queued',
+      ringing: 'ringing',
+      'in-progress': 'answered',
+      completed: 'completed',
     };
     return { type: map[raw.CallStatus] || 'failed', providerCallId: raw.CallSid || '', timestamp: new Date() };
   }
