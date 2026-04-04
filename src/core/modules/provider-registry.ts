@@ -5,12 +5,14 @@ import { STTPort } from '../ports/stt.port';
 import { TTSPort } from '../ports/tts.port';
 
 export interface ProviderConfig {
-  brainProvider: 'openai' | 'mock';
+  brainProvider: 'openai' | 'mistral' | 'mock';
   twilioAccountSid?: string;
   twilioApiKey?: string;
   twilioApiSecret?: string;
   twilioPhoneNumber?: string;
   openaiApiKey?: string;
+  mistralApiKey?: string;
+  mistralModel?: string;
   supabaseUrl?: string;
   supabaseServiceKey?: string;
   maxTurns: number;
@@ -30,12 +32,14 @@ let cachedProviders: RegisteredProviders | null = null;
 
 export function loadConfigFromEnv(): ProviderConfig {
   return {
-    brainProvider: (process.env.BRAIN_PROVIDER as 'openai' | 'mock') || 'mock',
+    brainProvider: (process.env.BRAIN_PROVIDER as ProviderConfig['brainProvider']) || 'mock',
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
     twilioApiKey: process.env.TWILIO_API_KEY,
     twilioApiSecret: process.env.TWILIO_API_SECRET,
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER,
     openaiApiKey: process.env.OPENAI_API_KEY,
+    mistralApiKey: process.env.MISTRAL_API_KEY,
+    mistralModel: process.env.MISTRAL_MODEL,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     maxTurns: parseInt(process.env.MAX_TURNS || '10', 10),
@@ -54,6 +58,12 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
   if (config.brainProvider === 'openai' && config.openaiApiKey) {
     const { OpenAIBrainAdapter } = await import('../../adapters/openai-brain.adapter');
     brain = new OpenAIBrainAdapter(config.openaiApiKey);
+  } else if (config.brainProvider === 'mistral' && config.mistralApiKey) {
+    const { MistralBrainAdapter } = await import('../../adapters/mistral-brain.adapter');
+    brain = new MistralBrainAdapter(
+      config.mistralApiKey,
+      config.mistralModel || 'mistral-small-latest',
+    );
   } else {
     const { MockBrainAdapter } = await import('../../adapters/mock-brain.adapter');
     brain = new MockBrainAdapter();
