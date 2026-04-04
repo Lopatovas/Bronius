@@ -54,6 +54,9 @@ export default function Home() {
   const [storeBusy, setStoreBusy] = useState(false);
   const [storeLast, setStoreLast] = useState<string | null>(null);
 
+  const [supabaseBusy, setSupabaseBusy] = useState(false);
+  const [supabaseLast, setSupabaseLast] = useState<string | null>(null);
+
   const [traceEntries, setTraceEntries] = useState<TraceEntry[]>([]);
   const [liveTrace, setLiveTrace] = useState(true);
   const lastTraceIdRef = useRef<string | null>(null);
@@ -368,6 +371,23 @@ export default function Home() {
             </button>
             <button
               type="button"
+              onClick={runSupabasePing}
+              disabled={supabaseBusy}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 8,
+                border: 'none',
+                background: supabaseBusy ? '#475569' : '#3ecf8e',
+                color: '#0f172a',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: supabaseBusy ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {supabaseBusy ? 'Checking…' : 'Ping Supabase'}
+            </button>
+            <button
+              type="button"
               onClick={runStorePing}
               disabled={storeBusy}
               style={{
@@ -384,7 +404,7 @@ export default function Home() {
               {storeBusy ? 'Running…' : 'Ping call store'}
             </button>
           </div>
-          {(twilioLast || storeLast) && (
+          {(twilioLast || supabaseLast || storeLast) && (
             <pre
               style={{
                 marginTop: 8,
@@ -393,11 +413,12 @@ export default function Home() {
                 borderRadius: 8,
                 fontSize: 12,
                 overflow: 'auto',
-                maxHeight: 200,
+                maxHeight: 240,
                 color: '#cbd5e1',
               }}
             >
               {twilioLast && `Twilio:\n${twilioLast}\n\n`}
+              {supabaseLast && `Supabase:\n${supabaseLast}\n\n`}
               {storeLast && `Call store:\n${storeLast}`}
             </pre>
           )}
