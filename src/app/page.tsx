@@ -211,6 +211,21 @@ export default function Home() {
     }
   };
 
+  const runSupabasePing = async () => {
+    setSupabaseBusy(true);
+    setSupabaseLast(null);
+    try {
+      const res = await fetch('/api/v1/debug/supabase-ping', { method: 'POST' });
+      const data = await res.json();
+      setSupabaseLast(JSON.stringify(data, null, 2));
+      void fetchTraceOnce();
+    } catch (e) {
+      setSupabaseLast(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setSupabaseBusy(false);
+    }
+  };
+
   const statusColor = (status: string) => {
     if (status === 'COMPLETED') return '#22c55e';
     if (status === 'FAILED') return '#ef4444';
