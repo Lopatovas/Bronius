@@ -69,6 +69,11 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
     brain = new MockBrainAdapter();
   }
 
+  if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_TRACE !== '0') {
+    const { LoggingBrainAdapter } = await import('../../adapters/logging-brain.adapter');
+    brain = new LoggingBrainAdapter(brain);
+  }
+
   let callStore: CallStorePort;
   if (config.supabaseUrl && config.supabaseServiceKey) {
     const { SupabaseCallStoreAdapter } = await import('../../adapters/supabase-call-store.adapter');

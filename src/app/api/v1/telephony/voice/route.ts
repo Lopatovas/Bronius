@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCallController, getProviders } from '@/lib/container';
 import { log } from '@/lib/logger';
+import { pushIntegrationTrace } from '@/lib/integration-trace';
 
 function twimlResponse(twiml: string): NextResponse {
   return new NextResponse(twiml, {
@@ -19,6 +20,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const formData = await req.formData();
+    const rawPayload: Record<string, string> = {};
+    formData.forEach((value, key) => {
+      rawPayload[key] = value.toString();
+    });
+
+    pushIntegrationTrace({
+      kind: 'twilio_webhook',
+      label: 'Twilio → Voice webhook (incoming)',
+      callSessionId,
+      meta: { params: rawPayload },
+    });
+
     log.info({ callSessionId }, 'Voice webhook called (call answered)');
 
     const controller = await getCallController();
@@ -48,6 +62,13 @@ export async function POST(req: NextRequest) {
 
     const actions = controller.generateGreeting(callSessionId);
     const twiml = providers.telephony.respondWithVoiceActions(actions);
+
+    pushIntegrationTrace({
+      kind: 'twilio_webhook',
+      label: '← TwiML response (voice)',
+      callSessionId,
+      meta: { twiml },
+    });
 
     return twimlResponse(twiml);
   } catch (err) {

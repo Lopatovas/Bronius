@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 import { TelephonyPort, PlaceCallParams, PlaceCallResult, VoiceAction } from '../core/ports/telephony.port';
 import { NormalizedProviderEvent } from '../core/domain/events';
+import { pushIntegrationTrace } from '../lib/integration-trace';
 
 const TWILIO_API_BASE = 'https://api.twilio.com/2010-04-01';
 
@@ -88,6 +89,18 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     body.append('StatusCallbackEvent', 'completed');
 
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}/Calls.json`;
+    const bodyStr = body.toString();
+
+    pushIntegrationTrace({
+      kind: 'twilio_rest',
+      label: 'Twilio REST → POST Calls.json (place call)',
+      callSessionId: params.callSessionId,
+      meta: {
+        url,
+        method: 'POST',
+        form: Object.fromEntries(body),
+      },
+    });
 
     const res = await fetch(url, {
       method: 'POST',
@@ -95,10 +108,24 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
         Authorization: this.authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: body.toString(),
+      body: bodyStr,
     });
 
     const json = await res.json() as Record<string, unknown>;
+
+    pushIntegrationTrace({
+      kind: 'twilio_rest',
+      label: 'Twilio REST ← Calls.json response',
+      callSessionId: params.callSessionId,
+      meta: {
+        httpStatus: res.status,
+        sid: json.sid,
+        status: json.status,
+        errorCode: json.code,
+        message: json.message,
+        error: json.error,
+      },
+    });
 
     if (!res.ok) {
       throw new Error(
@@ -117,6 +144,17 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
 
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}/Calls/${providerCallId}.json`;
     const body = new URLSearchParams({ Status: 'completed' });
+    const bodyStr = body.toString();
+
+    pushIntegrationTrace({
+      kind: 'twilio_rest',
+      label: 'Twilio REST → POST Call instance (hangup)',
+      meta: {
+        url,
+        method: 'POST',
+        form: Object.fromEntries(body),
+      },
+    });
 
     const res = await fetch(url, {
       method: 'POST',
@@ -124,13 +162,72 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
         Authorization: this.authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: body.toString(),
+      body: bodyStr,
+    });
+
+    const hangupJson = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    pushIntegrationTrace({
+      kind: 'twilio_rest',
+      label: 'Twilio REST ← hangup response',
+      meta: {
+        httpStatus: res.status,
+        sid: hangupJson.sid,
+        status: hangupJson.status,
+        message: hangupJson.message,
+        error: hangupJson.error,
+      },
     });
 
     if (!res.ok) {
-      const json = await res.json() as Record<string, unknown>;
-      throw new Error(`Twilio hangup error: ${json.message || res.statusText} (HTTP ${res.status})`);
+      throw new Error(`Twilio hangup error: ${hangupJson.message || res.statusText} (HTTP ${res.status})`);
     }
+  }
+
+  /** Validates API key/secret against the account record (no outbound call). */
+  async verifyRestCredentials(): Promise<
+    { ok: true; accountStatus: string; friendlyName?: string } | { ok: false; error: string; httpStatus?: number }
+  > {
+    this.assertConfigured();
+    const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}.json`;
+
+    pushIntegrationTrace({
+      kind: 'twilio_rest',
+      label: 'Twilio REST → GET Account (debug ping)',
+      meta: { url, method: 'GET' },
+    });
+
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: this.authHeader() },
+    });
+
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+    pushIntegrationTrace({
+      kind: 'twilio_rest',
+      label: 'Twilio REST ← Account response (debug ping)',
+      meta: {
+        httpStatus: res.status,
+        status: json.status,
+        friendlyName: json.friendly_name,
+        message: json.message,
+        code: json.code,
+      },
+    });
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: String(json.message || res.statusText || 'Request failed'),
+        httpStatus: res.status,
+      };
+    }
+
+    return {
+      ok: true,
+      accountStatus: String(json.status ?? 'unknown'),
+      friendlyName: typeof json.friendly_name === 'string' ? json.friendly_name : undefined,
+    };
   }
 
   normalizeProviderEvent(raw: Record<string, string>): NormalizedProviderEvent {

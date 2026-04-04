@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    env: {
+      INTEGRATION_TRACE: '0',
+    },
   },
   resolve: {
     alias: {

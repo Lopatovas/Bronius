@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCallController, getProviders } from '@/lib/container';
 import { log } from '@/lib/logger';
+import { pushIntegrationTrace } from '@/lib/integration-trace';
 
 const processedEvents = new Set<string>();
 
@@ -16,6 +17,13 @@ export async function POST(req: NextRequest) {
     if (!callSessionId) {
       return NextResponse.json({ error: 'Missing callSessionId' }, { status: 400 });
     }
+
+    pushIntegrationTrace({
+      kind: 'twilio_webhook',
+      label: 'Twilio → Status callback (incoming)',
+      callSessionId,
+      meta: { params: rawPayload },
+    });
 
     const eventKey = `${callSessionId}:${rawPayload.CallStatus}:${rawPayload.CallSid}`;
     if (processedEvents.has(eventKey)) {
@@ -45,6 +53,17 @@ export async function POST(req: NextRequest) {
     const event = providers.telephony.normalizeProviderEvent(rawPayload);
 
     await controller.handleProviderEvent(event, callSessionId);
+
+    pushIntegrationTrace({
+      kind: 'twilio_webhook',
+      label: '← Status callback response',
+      callSessionId,
+      meta: {
+        httpStatus: 200,
+        body: 'OK',
+        normalizedEvent: { type: event.type, providerCallId: event.providerCallId },
+      },
+    });
 
     return new NextResponse('OK', { status: 200 });
   } catch (err) {
