@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface CallTurn {
@@ -13,10 +13,13 @@ interface CallSession {
   id: string;
   toNumber: string;
   status: string;
+  providerCallId?: string;
   endReason?: string;
   startedAt?: string;
   endedAt?: string;
   durationSec?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const TERMINAL_STATUSES = ['COMPLETED', 'FAILED'];
@@ -44,6 +47,9 @@ export default function Home() {
   const [referenceId, setReferenceId] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [sessionsList, setSessionsList] = useState<CallSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionFilter, setSessionFilter] = useState('');
 
   const [brainPrompt, setBrainPrompt] = useState('Hello, this is a debug message.');
   const [brainBusy, setBrainBusy] = useState(false);
@@ -59,6 +65,36 @@ export default function Home() {
   const [supabaseLast, setSupabaseLast] = useState<string | null>(null);
 
   const urlHydratedRef = useRef(false);
+
+  const fetchSessionList = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch('/api/v1/calls?limit=200');
+      if (!res.ok) return;
+      const data = (await res.json()) as { sessions: CallSession[] };
+      setSessionsList(data.sessions);
+    } catch {
+      // ignore list errors (e.g. network)
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchSessionList();
+  }, [fetchSessionList]);
+
+  const filteredSessions = useMemo(() => {
+    const q = sessionFilter.trim().toLowerCase();
+    if (!q) return sessionsList;
+    return sessionsList.filter((s) => {
+      const id = s.id.toLowerCase();
+      const to = s.toNumber.toLowerCase();
+      const st = s.status.toLowerCase();
+      const prov = (s.providerCallId || '').toLowerCase();
+      return id.includes(q) || to.includes(q) || st.includes(q) || prov.includes(q);
+    });
+  }, [sessionsList, sessionFilter]);
 
   const isValidE164 = (num: string) => /^\+[1-9]\d{1,14}$/.test(num);
 
@@ -96,12 +132,13 @@ export default function Home() {
       setSession(sessionData.session);
       setTranscript(transcriptData.turns || []);
       router.replace(`/?call=${encodeURIComponent(trimmed)}`, { scroll: false });
+      void fetchSessionList();
     } catch {
       setLookupError('Network error. Try again.');
     } finally {
       setLookupLoading(false);
     }
-  }, [router]);
+  }, [router, fetchSessionList]);
 
   useEffect(() => {
     if (urlHydratedRef.current) return;
@@ -137,6 +174,7 @@ export default function Home() {
       setTranscript([]);
       setReferenceId(data.callSessionId);
       router.replace(`/?call=${encodeURIComponent(data.callSessionId)}`, { scroll: false });
+      void fetchSessionList();
     } catch {
       setError('Network error. Please try again.');
     } finally {
@@ -441,30 +479,96 @@ export default function Home() {
             Load a persisted call
           </h2>
           <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>
-            With Supabase configured, sessions and transcripts are stored by{' '}
-            <strong style={{ color: '#cbd5e1' }}>call session id</strong> (UUID). Paste an id from a
-            previous run, Supabase, or open this page as{' '}
-            <code style={{ color: '#94a3b8' }}>/?call=&lt;uuid&gt;</code>.
+            Choose a session from the list (newest first), filter by id, phone number, status, or Twilio
+            CallSid. You can also open{' '}
+            <code style={{ color: '#94a3b8' }}>/?call=&lt;uuid&gt;</code> directly.
           </p>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              type="text"
-              value={referenceId}
-              onChange={(e) => setReferenceId(e.target.value)}
-              placeholder="f6d7f083-915f-4b59-8f5c-da8943ea4b4c"
-              disabled={lookupLoading}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 12,
+              alignItems: 'center',
+              marginBottom: 12,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => void fetchSessionList()}
+              disabled={sessionsLoading}
               style={{
-                flex: 1,
-                minWidth: 200,
-                padding: '10px 14px',
+                padding: '8px 16px',
                 borderRadius: 8,
-                border: '1px solid #334155',
-                background: '#0f172a',
+                border: '1px solid #475569',
+                background: sessionsLoading ? '#334155' : '#1e293b',
                 color: '#e2e8f0',
                 fontSize: 14,
-                outline: 'none',
+                fontWeight: 600,
+                cursor: sessionsLoading ? 'not-allowed' : 'pointer',
               }}
-            />
+            >
+              {sessionsLoading ? 'Refreshing…' : 'Refresh list'}
+            </button>
+            <span style={{ fontSize: 13, color: '#64748b' }}>
+              {sessionsList.length} session{sessionsList.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <label
+            style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8', fontWeight: 600 }}
+          >
+            Search / filter
+          </label>
+          <input
+            type="search"
+            value={sessionFilter}
+            onChange={(e) => setSessionFilter(e.target.value)}
+            placeholder="Type to filter by id, number, status, CallSid…"
+            autoComplete="off"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1px solid #334155',
+              background: '#0f172a',
+              color: '#e2e8f0',
+              fontSize: 14,
+              outline: 'none',
+              marginBottom: 12,
+            }}
+          />
+          <label
+            style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8', fontWeight: 600 }}
+          >
+            Session
+          </label>
+          <select
+            value={referenceId}
+            onChange={(e) => setReferenceId(e.target.value)}
+            size={Math.min(10, Math.max(3, filteredSessions.length + 1))}
+            disabled={lookupLoading}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '8px 10px',
+              borderRadius: 8,
+              border: '1px solid #334155',
+              background: '#0f172a',
+              color: '#e2e8f0',
+              fontSize: 13,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              marginBottom: 12,
+            }}
+          >
+            <option value="">— Select a call session —</option>
+            {filteredSessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.toNumber} · {s.status}
+                {s.providerCallId ? ` · ${s.providerCallId}` : ''} · {s.id}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
               onClick={() => void loadCallById(referenceId)}
@@ -477,7 +581,7 @@ export default function Home() {
                 color: 'white',
                 fontSize: 14,
                 fontWeight: 600,
-                cursor: lookupLoading ? 'not-allowed' : 'pointer',
+                cursor: lookupLoading || !referenceId.trim() ? 'not-allowed' : 'pointer',
               }}
             >
               {lookupLoading ? 'Loading…' : 'Load call'}
