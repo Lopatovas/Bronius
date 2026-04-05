@@ -4,13 +4,20 @@
 
 Support voice conversations with Bronius directly in the browser — no phone number, no Twilio, no per-minute cost. Same conversation engine, different transport. Users click a "Talk to Bronius" button on a web page and have a real-time voice conversation.
 
+This is **not a throwaway test harness**. The product can support **both** modes: **PSTN via Twilio** (real phone) and **in-browser voice** (same brain, same transcript model, different transport). Let the user or the demo choose which entry point to use.
+
 ## Why this matters
 
 - **Zero cost per call** — no telephony charges, just server compute
 - **Zero friction for users** — no phone number needed, no app to install, works on any device with a browser and microphone
+- **Faster iteration when tuning brain + TTS + context** — the Twilio path adds webhooks, TwiML, status callbacks, and carrier behavior that are **slow and fiddly to debug**. The browser path skips that integration while you work on LLM prompts, neural TTS, and latency; you still smoke-test on the phone when needed.
 - **Better audio quality** — browser audio is 48kHz stereo vs telephone 8kHz mono, which means better STT accuracy
 - **Direct audio access** — you control the raw audio stream, no middleware like Twilio constraining what you can do with it
-- **Simpler architecture** — no webhooks, no TwiML, no XML, no status callbacks. Just a WebSocket streaming audio both ways
+- **Simpler real-time path** — for the browser leg: no Twilio XML round-trips for that session. Just a WebSocket (or managed SDK) streaming audio both ways
+
+## When to implement it (relative to TTS)
+
+It is reasonable to **defer** the browser channel until you need **real `TTSPort` work** anyway: on the phone, Twilio can hide TTS behind `<Say>` until you switch to `<Play>` + synthesis. Once you commit to **neural TTS** and own the synthesis pipeline, you are already investing in `TTSPort` — implementing the **browser channel in the same batch** reuses that work instead of building TTS twice in spirit (Polly for phone only, then something else for browser later).
 
 ## How it maps to the current architecture
 
@@ -128,12 +135,16 @@ These trade control for speed-to-market. The ports architecture means you could 
 
 ## Recommendation
 
-**For the POC:** Don't build this yet. The phone channel is the differentiator for the job platform. Get that working end-to-end first.
+**Phone first, browser second (historically):** Prove the happy path on **Twilio/PSTN** so real calls and job-relevant behavior are validated. That milestone can ship without a browser voice UI.
 
-**When to add it:** Once Bronius has a working conversation flow with a real LLM, adding a browser channel becomes a "nice demo" that's relatively quick to build. It also lets you test and iterate on conversations without burning Twilio minutes.
+**Then add the browser channel as a first-class mode:** Same `ConversationEngine` / brain / transcript stack; a second adapter for transport. Users (or demos) pick **phone call** vs **in-browser** — both are supported, not a prototype you throw away.
 
-**Simplest path to browser voice:** LiveKit Agents or Daily.co. They handle the hard parts (WebSocket management, audio encoding, echo cancellation, VAD) and you plug in your existing `BrainPort`. Could be a few hundred lines of code.
+**Why it is worth building:** You save **time and sanity** while iterating on **LLM + TTS + domain context**, because you are not constantly debugging Twilio’s side of the house. You still run **occasional real calls** to confirm PSTN-specific behavior.
 
-**Full custom path:** WebSocket server + Deepgram streaming STT + ElevenLabs TTS + browser `getUserMedia()`. More work, full control, no platform dependency.
+**Implementation shortcuts:**
 
-Either way, the core Bronius engine doesn't change. Just a new adapter.
+- **Simplest path to browser voice:** LiveKit Agents or Daily.co — they cover WebSocket/WebRTC-ish transport, audio plumbing, echo cancellation, VAD; you plug in `BrainPort` and your STT/TTS. Often on the order of hundreds of lines, not a greenfield media stack.
+
+- **Full custom path:** WebSocket server + Deepgram (or similar) streaming STT + your `TTSPort` + browser `getUserMedia()`. More work, full control.
+
+Either way, the core Bronius engine stays channel-agnostic — **a new port/adapter**, not a fork of the product.
