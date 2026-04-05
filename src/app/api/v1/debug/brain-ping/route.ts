@@ -4,7 +4,6 @@ import { getProviders } from '@/lib/container';
 import { loadConfigFromEnv } from '@/core/modules/provider-registry';
 import { generateId } from '@/lib/id';
 import type { ConversationContext } from '@/core/domain/types';
-import { pushIntegrationTrace } from '@/lib/integration-trace';
 
 const bodySchema = z.object({
   message: z.string().max(2000).optional(),
@@ -39,21 +38,7 @@ export async function POST(req: NextRequest) {
       maxTurns: config.maxTurns,
     };
 
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: brain ping (isolated)',
-      callSessionId: pingId,
-      meta: { brainProvider: config.brainProvider, prompt: text },
-    });
-
     const reply = await providers.brain.generateReply(context);
-
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: brain ping result',
-      callSessionId: pingId,
-      meta: { reply },
-    });
 
     return NextResponse.json({
       ok: true,
@@ -62,11 +47,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: brain ping error',
-      meta: { error: message },
-    });
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProviders } from '@/lib/container';
 import { TwilioTelephonyAdapter } from '@/adapters/twilio-telephony.adapter';
-import { pushIntegrationTrace } from '@/lib/integration-trace';
 
 export async function POST() {
   try {
@@ -13,12 +12,6 @@ export async function POST() {
         { status: 400 },
       );
     }
-
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: Twilio REST credential check',
-      meta: {},
-    });
 
     const result = await telephony.verifyRestCredentials();
 
@@ -36,11 +29,6 @@ export async function POST() {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: Twilio ping error',
-      meta: { error: message },
-    });
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

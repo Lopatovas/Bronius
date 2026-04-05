@@ -8,15 +8,18 @@ import {
 import { OpenAIBrainAdapter } from '@/adapters/openai-brain.adapter';
 import { MistralBrainAdapter } from '@/adapters/mistral-brain.adapter';
 import { MockBrainAdapter } from '@/adapters/mock-brain.adapter';
+import { resetContainer } from '@/lib/container';
 
 describe('provider-registry', () => {
   beforeEach(() => {
     resetProviders();
+    resetContainer();
     vi.unstubAllEnvs();
   });
 
   afterEach(() => {
     resetProviders();
+    resetContainer();
     vi.unstubAllEnvs();
   });
 

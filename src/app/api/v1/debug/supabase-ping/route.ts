@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { loadConfigFromEnv } from '@/core/modules/provider-registry';
-import { pushIntegrationTrace } from '@/lib/integration-trace';
 
 export async function POST() {
   const config = loadConfigFromEnv();
 
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: Supabase ping skipped (not configured)',
-      meta: { hasUrl: Boolean(config.supabaseUrl), hasKey: Boolean(config.supabaseServiceKey) },
-    });
     return NextResponse.json(
       {
         ok: false,
@@ -33,16 +27,6 @@ export async function POST() {
       throw new Error(error.message);
     }
 
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: Supabase ping OK',
-      meta: {
-        table: 'call_sessions',
-        approxRowCount: count,
-        supabaseHost: new URL(config.supabaseUrl).host,
-      },
-    });
-
     return NextResponse.json({
       ok: true,
       configured: true,
@@ -52,11 +36,6 @@ export async function POST() {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    pushIntegrationTrace({
-      kind: 'debug_tool',
-      label: 'Debug: Supabase ping error',
-      meta: { error: message },
-    });
     return NextResponse.json({ ok: false, configured: true, error: message }, { status: 502 });
   }
 }

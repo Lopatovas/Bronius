@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface CallTurn {
   speaker: string;
@@ -18,16 +19,10 @@ interface CallSession {
   durationSec?: number;
 }
 
-interface TraceEntry {
-  id: string;
-  at: string;
-  kind: string;
-  label: string;
-  callSessionId?: string;
-  meta: Record<string, unknown>;
-}
-
 const TERMINAL_STATUSES = ['COMPLETED', 'FAILED'];
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const cardStyle: CSSProperties = {
   background: '#1e293b',
@@ -37,12 +32,18 @@ const cardStyle: CSSProperties = {
 };
 
 export default function Home() {
+  const router = useRouter();
+
   const [phoneNumber, setPhoneNumber] = useState('');
   const [callId, setCallId] = useState<string | null>(null);
   const [session, setSession] = useState<CallSession | null>(null);
   const [transcript, setTranscript] = useState<CallTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [referenceId, setReferenceId] = useState('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
 
   const [brainPrompt, setBrainPrompt] = useState('Hello, this is a debug message.');
   const [brainBusy, setBrainBusy] = useState(false);
@@ -57,12 +58,60 @@ export default function Home() {
   const [supabaseBusy, setSupabaseBusy] = useState(false);
   const [supabaseLast, setSupabaseLast] = useState<string | null>(null);
 
-  const [traceEntries, setTraceEntries] = useState<TraceEntry[]>([]);
-  const [liveTrace, setLiveTrace] = useState(true);
-  const lastTraceIdRef = useRef<string | null>(null);
-  const traceEndRef = useRef<HTMLPreElement | null>(null);
+  const urlHydratedRef = useRef(false);
 
   const isValidE164 = (num: string) => /^\+[1-9]\d{1,14}$/.test(num);
+
+  const loadCallById = useCallback(async (id: string) => {
+    const trimmed = id.trim();
+    if (!UUID_RE.test(trimmed)) {
+      setLookupError('Enter a valid call session UUID (from the API or Supabase).');
+      return;
+    }
+
+    setLookupError(null);
+    setLookupLoading(true);
+    setError(null);
+    try {
+      const [sessionRes, transcriptRes] = await Promise.all([
+        fetch(`/api/v1/calls/${encodeURIComponent(trimmed)}`),
+        fetch(`/api/v1/calls/${encodeURIComponent(trimmed)}/transcript`),
+      ]);
+
+      if (!sessionRes.ok) {
+        const data = (await sessionRes.json().catch(() => ({}))) as { error?: string };
+        setLookupError(data.error || 'Session not found');
+        setCallId(null);
+        setSession(null);
+        setTranscript([]);
+        return;
+      }
+
+      const sessionData = (await sessionRes.json()) as { session: CallSession };
+      const transcriptData = transcriptRes.ok
+        ? ((await transcriptRes.json()) as { turns: CallTurn[] })
+        : { turns: [] };
+
+      setCallId(trimmed);
+      setSession(sessionData.session);
+      setTranscript(transcriptData.turns || []);
+      router.replace(`/?call=${encodeURIComponent(trimmed)}`, { scroll: false });
+    } catch {
+      setLookupError('Network error. Try again.');
+    } finally {
+      setLookupLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (urlHydratedRef.current) return;
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams(window.location.search).get('call');
+    if (q?.trim() && UUID_RE.test(q.trim())) {
+      urlHydratedRef.current = true;
+      void loadCallById(q.trim());
+    }
+  }, [loadCallById]);
 
   const startCall = async () => {
     setError(null);
@@ -86,6 +135,8 @@ export default function Home() {
       setCallId(data.callSessionId);
       setSession(data.session);
       setTranscript([]);
+      setReferenceId(data.callSessionId);
+      router.replace(`/?call=${encodeURIComponent(data.callSessionId)}`, { scroll: false });
     } catch {
       setError('Network error. Please try again.');
     } finally {
@@ -121,47 +172,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [callId, session, pollStatus]);
 
-  const fetchTraceOnce = useCallback(async () => {
-    const since = lastTraceIdRef.current;
-    const q = since ? `?sinceId=${encodeURIComponent(since)}` : '';
-    const res = await fetch(`/api/v1/debug/trace${q}`);
-    if (!res.ok) return;
-    const data = (await res.json()) as {
-      entries: TraceEntry[];
-      resetSuggested?: boolean;
-    };
-
-    if (!since || data.resetSuggested) {
-      setTraceEntries(data.entries);
-    } else {
-      setTraceEntries((prev) => [...prev, ...data.entries]);
-    }
-
-    if (data.entries.length > 0) {
-      lastTraceIdRef.current = data.entries[data.entries.length - 1].id;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!liveTrace) return;
-    void fetchTraceOnce();
-    const t = setInterval(() => void fetchTraceOnce(), 2000);
-    return () => clearInterval(t);
-  }, [liveTrace, fetchTraceOnce]);
-
-  useEffect(() => {
-    if (liveTrace && traceEndRef.current) {
-      traceEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-  }, [traceEntries, liveTrace]);
-
-  const clearTrace = async () => {
-    await fetch('/api/v1/debug/trace/clear', { method: 'POST' });
-    lastTraceIdRef.current = null;
-    setTraceEntries([]);
-    void fetchTraceOnce();
-  };
-
   const runBrainPing = async () => {
     setBrainBusy(true);
     setBrainLast(null);
@@ -173,7 +183,6 @@ export default function Home() {
       });
       const data = await res.json();
       setBrainLast(JSON.stringify(data, null, 2));
-      void fetchTraceOnce();
     } catch (e) {
       setBrainLast(e instanceof Error ? e.message : 'Request failed');
     } finally {
@@ -188,7 +197,6 @@ export default function Home() {
       const res = await fetch('/api/v1/debug/twilio-ping', { method: 'POST' });
       const data = await res.json();
       setTwilioLast(JSON.stringify(data, null, 2));
-      void fetchTraceOnce();
     } catch (e) {
       setTwilioLast(e instanceof Error ? e.message : 'Request failed');
     } finally {
@@ -203,7 +211,6 @@ export default function Home() {
       const res = await fetch('/api/v1/debug/call-store-ping', { method: 'POST' });
       const data = await res.json();
       setStoreLast(JSON.stringify(data, null, 2));
-      void fetchTraceOnce();
     } catch (e) {
       setStoreLast(e instanceof Error ? e.message : 'Request failed');
     } finally {
@@ -218,7 +225,6 @@ export default function Home() {
       const res = await fetch('/api/v1/debug/supabase-ping', { method: 'POST' });
       const data = await res.json();
       setSupabaseLast(JSON.stringify(data, null, 2));
-      void fetchTraceOnce();
     } catch (e) {
       setSupabaseLast(e instanceof Error ? e.message : 'Request failed');
     } finally {
@@ -231,15 +237,6 @@ export default function Home() {
     if (status === 'FAILED') return '#ef4444';
     if (['CONNECTED', 'GREETING', 'LISTENING', 'RESPONDING'].includes(status)) return '#3b82f6';
     return '#f59e0b';
-  };
-
-  const kindColor = (kind: string) => {
-    if (kind === 'twilio_rest') return '#a78bfa';
-    if (kind === 'twilio_webhook') return '#38bdf8';
-    if (kind === 'brain') return '#f472b6';
-    if (kind === 'api') return '#fbbf24';
-    if (kind === 'debug_tool') return '#34d399';
-    return '#94a3b8';
   };
 
   return (
@@ -296,7 +293,7 @@ export default function Home() {
             Integration checks
           </h2>
           <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 0, marginBottom: 20, lineHeight: 1.5 }}>
-            Exercise each adapter without a live call. Results also appear in the live trace below.
+            Exercise each adapter without placing a call. Responses show below each control.
           </p>
 
           <div style={{ marginBottom: 20 }}>
@@ -440,110 +437,55 @@ export default function Home() {
         </div>
 
         <div style={cardStyle}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 12,
-              marginBottom: 16,
-            }}
-          >
-            <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Live integration trace</h2>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <label style={{ fontSize: 13, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="checkbox"
-                  checked={liveTrace}
-                  onChange={(e) => setLiveTrace(e.target.checked)}
-                />
-                Auto-refresh (2s)
-              </label>
-              <button
-                type="button"
-                onClick={() => void fetchTraceOnce()}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 8,
-                  border: '1px solid #475569',
-                  background: '#334155',
-                  color: '#e2e8f0',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                Refresh now
-              </button>
-              <button
-                type="button"
-                onClick={() => void clearTrace()}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 8,
-                  border: '1px solid #7f1d1d',
-                  background: '#450a0a',
-                  color: '#fecaca',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-          <p style={{ color: '#64748b', fontSize: 12, marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
-            Twilio REST calls, webhook payloads, TwiML responses, LLM requests/replies, and API activity.
-            The buffer is <strong style={{ color: '#94a3b8' }}>in-memory per server instance</strong> — on
-            Vercel/serverless, voice and gather webhooks often hit a different instance than this page, so
-            those lines may be missing here even when Twilio delivered them (check Twilio Debugger and
-            deployment logs). Set <code style={{ color: '#94a3b8' }}>INTEGRATION_TRACE=0</code> to disable
-            tracing.
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginTop: 0, marginBottom: 8 }}>
+            Load a persisted call
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>
+            With Supabase configured, sessions and transcripts are stored by{' '}
+            <strong style={{ color: '#cbd5e1' }}>call session id</strong> (UUID). Paste an id from a
+            previous run, Supabase, or open this page as{' '}
+            <code style={{ color: '#94a3b8' }}>/?call=&lt;uuid&gt;</code>.
           </p>
-          <div
-            style={{
-              maxHeight: 420,
-              overflowY: 'auto',
-              background: '#0f172a',
-              borderRadius: 8,
-              border: '1px solid #334155',
-              padding: 12,
-            }}
-          >
-            {traceEntries.length === 0 ? (
-              <p style={{ color: '#64748b', fontSize: 14, margin: 8 }}>No trace entries yet.</p>
-            ) : (
-              traceEntries.map((e) => (
-                <div
-                  key={e.id}
-                  style={{
-                    borderLeft: `3px solid ${kindColor(e.kind)}`,
-                    paddingLeft: 10,
-                    marginBottom: 14,
-                  }}
-                >
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>
-                    {e.at} ·{' '}
-                    <span style={{ color: kindColor(e.kind), fontWeight: 600 }}>{e.kind}</span>
-                    {e.callSessionId ? ` · ${e.callSessionId}` : ''}
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{e.label}</div>
-                  <pre
-                    style={{
-                      margin: 0,
-                      fontSize: 11,
-                      color: '#94a3b8',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {JSON.stringify(e.meta, null, 2)}
-                  </pre>
-                </div>
-              ))
-            )}
-            <pre ref={traceEndRef} style={{ margin: 0, height: 1 }} />
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={referenceId}
+              onChange={(e) => setReferenceId(e.target.value)}
+              placeholder="f6d7f083-915f-4b59-8f5c-da8943ea4b4c"
+              disabled={lookupLoading}
+              style={{
+                flex: 1,
+                minWidth: 200,
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid #334155',
+                background: '#0f172a',
+                color: '#e2e8f0',
+                fontSize: 14,
+                outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void loadCallById(referenceId)}
+              disabled={lookupLoading || !referenceId.trim()}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 8,
+                border: 'none',
+                background: lookupLoading ? '#475569' : '#8b5cf6',
+                color: 'white',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: lookupLoading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {lookupLoading ? 'Loading…' : 'Load call'}
+            </button>
           </div>
+          {lookupError && (
+            <p style={{ color: '#f87171', marginTop: 12, fontSize: 14 }}>{lookupError}</p>
+          )}
         </div>
 
         {session && (

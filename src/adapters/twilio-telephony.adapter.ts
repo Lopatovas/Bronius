@@ -1,19 +1,8 @@
 import { createHmac } from 'crypto';
 import { TelephonyPort, PlaceCallParams, PlaceCallResult, VoiceAction } from '../core/ports/telephony.port';
 import { NormalizedProviderEvent } from '../core/domain/events';
-import { pushIntegrationTrace } from '../lib/integration-trace';
 
 const TWILIO_API_BASE = 'https://api.twilio.com/2010-04-01';
-
-/** Preserves repeated keys (e.g. multiple StatusCallbackEvent) for trace logs. */
-function urlSearchParamsForTrace(params: URLSearchParams): Record<string, string | string[]> {
-  const out: Record<string, string | string[]> = {};
-  for (const key of new Set(params.keys())) {
-    const all = params.getAll(key);
-    out[key] = all.length === 1 ? all[0]! : all;
-  }
-  return out;
-}
 
 function escapeXml(text: string): string {
   return text
@@ -101,17 +90,6 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}/Calls.json`;
     const bodyStr = body.toString();
 
-    pushIntegrationTrace({
-      kind: 'twilio_rest',
-      label: 'Twilio REST → POST Calls.json (place call)',
-      callSessionId: params.callSessionId,
-      meta: {
-        url,
-        method: 'POST',
-        form: urlSearchParamsForTrace(body),
-      },
-    });
-
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -122,20 +100,6 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     });
 
     const json = await res.json() as Record<string, unknown>;
-
-    pushIntegrationTrace({
-      kind: 'twilio_rest',
-      label: 'Twilio REST ← Calls.json response',
-      callSessionId: params.callSessionId,
-      meta: {
-        httpStatus: res.status,
-        sid: json.sid,
-        status: json.status,
-        errorCode: json.code,
-        message: json.message,
-        error: json.error,
-      },
-    });
 
     if (!res.ok) {
       throw new Error(
@@ -156,16 +120,6 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     const body = new URLSearchParams({ Status: 'completed' });
     const bodyStr = body.toString();
 
-    pushIntegrationTrace({
-      kind: 'twilio_rest',
-      label: 'Twilio REST → POST Call instance (hangup)',
-      meta: {
-        url,
-        method: 'POST',
-        form: Object.fromEntries(body),
-      },
-    });
-
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -176,17 +130,6 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     });
 
     const hangupJson = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    pushIntegrationTrace({
-      kind: 'twilio_rest',
-      label: 'Twilio REST ← hangup response',
-      meta: {
-        httpStatus: res.status,
-        sid: hangupJson.sid,
-        status: hangupJson.status,
-        message: hangupJson.message,
-        error: hangupJson.error,
-      },
-    });
 
     if (!res.ok) {
       throw new Error(`Twilio hangup error: ${hangupJson.message || res.statusText} (HTTP ${res.status})`);
@@ -200,30 +143,12 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     this.assertConfigured();
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}.json`;
 
-    pushIntegrationTrace({
-      kind: 'twilio_rest',
-      label: 'Twilio REST → GET Account (debug ping)',
-      meta: { url, method: 'GET' },
-    });
-
     const res = await fetch(url, {
       method: 'GET',
       headers: { Authorization: this.authHeader() },
     });
 
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-    pushIntegrationTrace({
-      kind: 'twilio_rest',
-      label: 'Twilio REST ← Account response (debug ping)',
-      meta: {
-        httpStatus: res.status,
-        status: json.status,
-        friendlyName: json.friendly_name,
-        message: json.message,
-        code: json.code,
-      },
-    });
 
     if (!res.ok) {
       return {

@@ -50,3 +50,11 @@ export async function getTranscriptService(): Promise<TranscriptService> {
   }
   return transcriptService!;
 }
+
+/** Clears cached singletons (e.g. between tests). Pair with resetProviders(). */
+export function resetContainer(): void {
+  controller = null;
+  conversationEngine = null;
+  transcriptService = null;
+  providers = null;
+}
