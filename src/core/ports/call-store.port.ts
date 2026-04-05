@@ -28,4 +28,6 @@ export interface CallStorePort {
   appendTurn(params: AppendTurnParams): Promise<CallTurn>;
   getSession(callSessionId: string): Promise<CallSession | null>;
   getTranscript(callSessionId: string): Promise<CallTurn[]>;
+  /** Recent sessions, newest first (for UI). */
+  listSessions(limit: number): Promise<CallSession[]>;
 }

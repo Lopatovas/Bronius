@@ -24,6 +24,7 @@ The `ConversationEngine` calls `generateReply()` with the full conversation hist
 |---------|----------|--------|
 | `MockBrainAdapter` | None (canned replies) | Working, for dev/test |
 | `OpenAIBrainAdapter` | OpenAI (GPT-4o-mini) | Implemented, needs API key |
+| `MistralBrainAdapter` | Mistral (default `mistral-small-latest`) | Implemented, needs API key from [console.mistral.ai](https://console.mistral.ai) |
 
 ## Provider options
 
@@ -148,9 +149,9 @@ If you need better conversational nuance later, swap to Anthropic Claude.
 
 ## Provider-registry config pattern
 
-The `BRAIN_PROVIDER` env var controls which adapter loads. Current values: `openai`, `mock`. Adding a new provider means adding its name here and mapping it to the adapter class:
+The `BRAIN_PROVIDER` env var controls which adapter loads. Current values: `openai`, `mistral`, `mock`. Adding a new provider means adding its name here and mapping it to the adapter class:
 
 ```
-BRAIN_PROVIDER=groq     # or: openai, anthropic, gemini, mistral, mock
+BRAIN_PROVIDER=groq     # or: openai, mistral, anthropic, gemini, mock
 GROQ_API_KEY=gsk_...    # provider-specific key
 ```

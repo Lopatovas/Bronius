@@ -54,7 +54,16 @@ export type DomainEvent =
   | CallFailed;
 
 export interface NormalizedProviderEvent {
-  type: 'ringing' | 'answered' | 'completed' | 'failed' | 'no-answer' | 'busy' | 'canceled';
+  type:
+    | 'initiated'
+    | 'queued'
+    | 'ringing'
+    | 'answered'
+    | 'completed'
+    | 'failed'
+    | 'no-answer'
+    | 'busy'
+    | 'canceled';
   providerCallId: string;
   callSessionId?: string;
   timestamp: Date;

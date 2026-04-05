@@ -22,6 +22,8 @@ class StubTelephonyAdapter implements TelephonyPort {
 
   normalizeProviderEvent(raw: Record<string, string>): NormalizedProviderEvent {
     const statusMap: Record<string, NormalizedProviderEvent['type']> = {
+      initiated: 'initiated',
+      queued: 'queued',
       ringing: 'ringing',
       'in-progress': 'answered',
       completed: 'completed',

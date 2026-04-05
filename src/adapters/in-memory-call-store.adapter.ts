@@ -73,6 +73,13 @@ export class InMemoryCallStoreAdapter implements CallStorePort {
     return sessionTurns ? sessionTurns.map((t) => ({ ...t })) : [];
   }
 
+  async listSessions(limit: number): Promise<CallSession[]> {
+    const sorted = [...this.sessions.values()].sort(
+      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+    );
+    return sorted.slice(0, Math.max(0, limit)).map((s) => ({ ...s }));
+  }
+
   clear(): void {
     this.sessions.clear();
     this.turns.clear();

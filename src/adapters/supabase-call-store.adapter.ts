@@ -117,6 +117,18 @@ export class SupabaseCallStoreAdapter implements CallStorePort {
     return (data ?? []).map((r) => this.mapTurnRow(r));
   }
 
+  async listSessions(limit: number): Promise<CallSession[]> {
+    const safeLimit = Math.min(500, Math.max(1, limit));
+    const { data, error } = await this.client
+      .from('call_sessions')
+      .select()
+      .order('updated_at', { ascending: false })
+      .limit(safeLimit);
+
+    if (error) throw new Error(`Supabase listSessions: ${error.message}`);
+    return (data ?? []).map((row) => this.mapSessionRow(row));
+  }
+
   private mapSessionRow(row: Record<string, unknown>): CallSession {
     return {
       id: row.id as string,

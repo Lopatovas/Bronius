@@ -5,3 +5,6 @@ node_modules/
 *.tsbuildinfo
 next-env.d.ts
 dist/
+
+# Local tooling exports (e.g. Vercel log downloads)
+bronius-log-export*.json

@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData();
+
     const speechResult = formData.get('SpeechResult')?.toString();
     const confidenceStr = formData.get('Confidence')?.toString();
     const confidence = confidenceStr ? parseFloat(confidenceStr) : undefined;

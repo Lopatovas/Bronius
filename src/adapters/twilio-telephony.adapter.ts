@@ -88,6 +88,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     body.append('StatusCallbackEvent', 'completed');
 
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}/Calls.json`;
+    const bodyStr = body.toString();
 
     const res = await fetch(url, {
       method: 'POST',
@@ -95,7 +96,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
         Authorization: this.authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: body.toString(),
+      body: bodyStr,
     });
 
     const json = await res.json() as Record<string, unknown>;
@@ -117,6 +118,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
 
     const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}/Calls/${providerCallId}.json`;
     const body = new URLSearchParams({ Status: 'completed' });
+    const bodyStr = body.toString();
 
     const res = await fetch(url, {
       method: 'POST',
@@ -124,13 +126,43 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
         Authorization: this.authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: body.toString(),
+      body: bodyStr,
     });
 
+    const hangupJson = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
     if (!res.ok) {
-      const json = await res.json() as Record<string, unknown>;
-      throw new Error(`Twilio hangup error: ${json.message || res.statusText} (HTTP ${res.status})`);
+      throw new Error(`Twilio hangup error: ${hangupJson.message || res.statusText} (HTTP ${res.status})`);
     }
+  }
+
+  /** Validates API key/secret against the account record (no outbound call). */
+  async verifyRestCredentials(): Promise<
+    { ok: true; accountStatus: string; friendlyName?: string } | { ok: false; error: string; httpStatus?: number }
+  > {
+    this.assertConfigured();
+    const url = `${TWILIO_API_BASE}/Accounts/${this.accountSid}.json`;
+
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: this.authHeader() },
+    });
+
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: String(json.message || res.statusText || 'Request failed'),
+        httpStatus: res.status,
+      };
+    }
+
+    return {
+      ok: true,
+      accountStatus: String(json.status ?? 'unknown'),
+      friendlyName: typeof json.friendly_name === 'string' ? json.friendly_name : undefined,
+    };
   }
 
   normalizeProviderEvent(raw: Record<string, string>): NormalizedProviderEvent {
@@ -138,6 +170,8 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     const providerCallId = raw.CallSid || '';
 
     const typeMap: Record<string, NormalizedProviderEvent['type']> = {
+      initiated: 'initiated',
+      queued: 'queued',
       ringing: 'ringing',
       'in-progress': 'answered',
       completed: 'completed',
