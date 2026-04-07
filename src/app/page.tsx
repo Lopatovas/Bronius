@@ -64,6 +64,11 @@ export default function Home() {
   const [supabaseBusy, setSupabaseBusy] = useState(false);
   const [supabaseLast, setSupabaseLast] = useState<string | null>(null);
 
+  const [ttsText, setTtsText] = useState('Hello! This is Bronius.');
+  const [ttsBusy, setTtsBusy] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
+
   const urlHydratedRef = useRef(false);
 
   const fetchSessionList = useCallback(async () => {
@@ -270,6 +275,40 @@ export default function Home() {
     }
   };
 
+  const runTtsTest = async () => {
+    const text = ttsText.trim();
+    if (!text) return;
+
+    setTtsBusy(true);
+    setTtsError(null);
+
+    if (ttsAudioUrl) {
+      URL.revokeObjectURL(ttsAudioUrl);
+      setTtsAudioUrl(null);
+    }
+
+    try {
+      const res = await fetch(`/api/v1/tts?text=${encodeURIComponent(text)}&format=mp3`);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as null | { error?: string };
+        setTtsError(j?.error || `TTS failed (HTTP ${res.status})`);
+        return;
+      }
+      const blob = await res.blob();
+      setTtsAudioUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setTtsError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setTtsBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (ttsAudioUrl) URL.revokeObjectURL(ttsAudioUrl);
+    };
+  }, [ttsAudioUrl]);
+
   const statusColor = (status: string) => {
     if (status === 'COMPLETED') return '#22c55e';
     if (status === 'FAILED') return '#ef4444';
@@ -391,6 +430,84 @@ export default function Home() {
                 {brainLast}
               </pre>
             )}
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label
+              style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8', fontWeight: 600 }}
+            >
+              Text-to-speech (TTSPort)
+            </label>
+            <textarea
+              value={ttsText}
+              onChange={(e) => setTtsText(e.target.value)}
+              rows={2}
+              disabled={ttsBusy}
+              placeholder="Type something, synthesize it, and play the audio…"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid #334155',
+                background: '#0f172a',
+                color: '#e2e8f0',
+                fontSize: 14,
+                resize: 'vertical',
+                marginBottom: 8,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={runTtsTest}
+                disabled={ttsBusy || !ttsText.trim()}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: ttsBusy ? '#475569' : '#f97316',
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: ttsBusy || !ttsText.trim() ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {ttsBusy ? 'Synthesizing…' : 'Synthesize'}
+              </button>
+              {ttsAudioUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    URL.revokeObjectURL(ttsAudioUrl);
+                    setTtsAudioUrl(null);
+                  }}
+                  disabled={ttsBusy}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 8,
+                    border: '1px solid #475569',
+                    background: '#1e293b',
+                    color: '#e2e8f0',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: ttsBusy ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Clear audio
+                </button>
+              )}
+            </div>
+            {ttsError && <p style={{ color: '#f87171', marginTop: 10, fontSize: 14 }}>{ttsError}</p>}
+            {ttsAudioUrl && (
+              <div style={{ marginTop: 12 }}>
+                <audio controls src={ttsAudioUrl} style={{ width: '100%' }} />
+              </div>
+            )}
+            <p style={{ color: '#64748b', fontSize: 12, marginTop: 10, marginBottom: 0, lineHeight: 1.4 }}>
+              Uses <code>/api/v1/tts</code>. Requires <code>MISTRAL_TTS_VOICE_ID</code> to be set; otherwise it will return
+              “TTS not configured”.
+            </p>
           </div>
 
           <div
