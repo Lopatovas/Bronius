@@ -47,7 +47,11 @@ export async function POST(req: NextRequest) {
     }
 
     const actions = controller.generateGreeting(callSessionId);
-    const twiml = providers.telephony.respondWithVoiceActions(actions);
+    const twiml = providers.telephony.respondWithVoiceActions(actions, {
+      webhookBaseUrl: req.nextUrl.origin,
+      useTts: Boolean(providers.tts),
+      ttsFormat: 'mp3',
+    });
 
     return twimlResponse(twiml);
   } catch (err) {

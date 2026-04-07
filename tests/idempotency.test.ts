@@ -22,7 +22,7 @@ class StubTelephonyAdapter implements TelephonyPort {
     };
     return { type: map[raw.CallStatus] || 'failed', providerCallId: raw.CallSid || '', timestamp: new Date() };
   }
-  respondWithVoiceActions(): string { return '<Response/>'; }
+  respondWithVoiceActions(_actions: VoiceAction[], _options?: unknown): string { return '<Response/>'; }
   validateWebhookSignature(): boolean { return true; }
 }
 

@@ -13,12 +13,26 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function buildTwiml(actions: VoiceAction[]): string {
+function buildTwiml(
+  actions: VoiceAction[],
+  options?: { webhookBaseUrl?: string; useTts?: boolean; ttsFormat?: string },
+): string {
+  const webhookBaseUrl = options?.webhookBaseUrl;
+  const useTts = Boolean(options?.useTts && webhookBaseUrl);
+  const ttsFormat = options?.ttsFormat || 'mp3';
+
   let body = '';
   for (const action of actions) {
     switch (action.type) {
       case 'say':
-        body += `<Say voice="${action.voice || 'Polly.Amy'}">${escapeXml(action.text || '')}</Say>`;
+        if (useTts) {
+          const text = action.text || '';
+          const voice = action.voice ? `&voice=${encodeURIComponent(action.voice)}` : '';
+          const url = `${webhookBaseUrl}/api/v1/tts?text=${encodeURIComponent(text)}&format=${encodeURIComponent(ttsFormat)}${voice}`;
+          body += `<Play>${escapeXml(url)}</Play>`;
+        } else {
+          body += `<Say voice="${action.voice || 'Polly.Amy'}">${escapeXml(action.text || '')}</Say>`;
+        }
         break;
       case 'gather': {
         const opts = action.gatherOptions;
@@ -189,8 +203,11 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     };
   }
 
-  respondWithVoiceActions(actions: VoiceAction[]): string {
-    return buildTwiml(actions);
+  respondWithVoiceActions(
+    actions: VoiceAction[],
+    options?: { webhookBaseUrl?: string; useTts?: boolean; ttsFormat?: 'mp3' | 'wav' | 'opus' | 'pcm' | 'flac' },
+  ): string {
+    return buildTwiml(actions, options);
   }
 
   validateWebhookSignature(

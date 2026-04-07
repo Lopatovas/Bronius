@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
     const providers = await getProviders();
 
     const actions = await controller.handleGatherResult(callSessionId, speechResult, confidence);
-    const twiml = providers.telephony.respondWithVoiceActions(actions);
+    const twiml = providers.telephony.respondWithVoiceActions(actions, {
+      webhookBaseUrl: req.nextUrl.origin,
+      useTts: Boolean(providers.tts),
+      ttsFormat: 'mp3',
+    });
 
     return twimlResponse(twiml);
   } catch (err) {

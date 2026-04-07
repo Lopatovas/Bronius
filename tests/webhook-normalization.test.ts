@@ -152,6 +152,17 @@ describe('TwiML Generation', () => {
     expect(twiml).toContain('Polly.Amy');
   });
 
+  it('should generate Play TwiML for Say action when TTS is enabled', () => {
+    const twiml = adapter.respondWithVoiceActions(
+      [{ type: 'say', text: 'Hello there!' }],
+      { webhookBaseUrl: 'https://example.com', useTts: true, ttsFormat: 'mp3' },
+    );
+    expect(twiml).toContain('<Play>');
+    expect(twiml).toContain('https://example.com/api/v1/tts?text=');
+    expect(twiml).toContain('&amp;format=mp3');
+    expect(twiml).not.toContain('<Say');
+  });
+
   it('should generate valid TwiML for Gather action', () => {
     const twiml = adapter.respondWithVoiceActions([
       {

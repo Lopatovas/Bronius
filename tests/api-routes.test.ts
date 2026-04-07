@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { resetProviders } from '@/core/modules/provider-registry';
+import { createProvidersFromInstances, resetProviders } from '@/core/modules/provider-registry';
 import { resetContainer } from '@/lib/container';
 import { generateId } from '@/lib/id';
+import { InMemoryCallStoreAdapter } from '@/adapters/in-memory-call-store.adapter';
+import { MockBrainAdapter } from '@/adapters/mock-brain.adapter';
+import type { TelephonyPort, PlaceCallResult, VoiceAction } from '@/core/ports/telephony.port';
+import type { NormalizedProviderEvent } from '@/core/domain/events';
+import type { TTSPort } from '@/core/ports/tts.port';
 
 function resetAll() {
   resetContainer();
@@ -124,5 +129,64 @@ describe('call session read API routes', () => {
     const j = (await res.json()) as { turns: Array<{ text: string }> };
     expect(j.turns).toHaveLength(1);
     expect(j.turns[0].text).toBe('Hi');
+  });
+});
+
+describe('tts API routes', () => {
+  beforeEach(() => {
+    resetAll();
+    vi.unstubAllEnvs();
+  });
+
+  class StubTelephony implements TelephonyPort {
+    async placeCall(): Promise<PlaceCallResult> {
+      return { providerCallId: 'stub' };
+    }
+    async hangupCall(): Promise<void> {}
+    normalizeProviderEvent(): NormalizedProviderEvent {
+      return { type: 'failed', providerCallId: '', timestamp: new Date() };
+    }
+    respondWithVoiceActions(_actions: VoiceAction[]): string {
+      return '<Response/>';
+    }
+    validateWebhookSignature(): boolean {
+      return true;
+    }
+  }
+
+  it('GET /api/v1/tts returns 400 when TTS not configured', async () => {
+    createProvidersFromInstances({
+      telephony: new StubTelephony(),
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+    });
+
+    const { GET } = await import('@/app/api/v1/tts/route');
+    const res = await GET(new NextRequest('http://localhost/api/v1/tts?text=Hello'));
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/v1/tts returns audio bytes when configured', async () => {
+    const tts: TTSPort = {
+      synthesize: async () => ({
+        contentType: 'audio/mpeg',
+        audio: new Uint8Array([1, 2, 3, 4]),
+      }),
+    };
+
+    createProvidersFromInstances({
+      telephony: new StubTelephony(),
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+      tts,
+    });
+
+    const { GET } = await import('@/app/api/v1/tts/route');
+    const res = await GET(new NextRequest('http://localhost/api/v1/tts?text=Hello&format=mp3'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('audio/mpeg');
+    const buf = new Uint8Array(await res.arrayBuffer());
+    expect(buf.length).toBe(4);
+    expect(Array.from(buf)).toEqual([1, 2, 3, 4]);
   });
 });

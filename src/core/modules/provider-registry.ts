@@ -13,6 +13,8 @@ export interface ProviderConfig {
   openaiApiKey?: string;
   mistralApiKey?: string;
   mistralModel?: string;
+  mistralTtsModel?: string;
+  mistralTtsVoiceId?: string;
   supabaseUrl?: string;
   supabaseServiceKey?: string;
   maxTurns: number;
@@ -40,6 +42,8 @@ export function loadConfigFromEnv(): ProviderConfig {
     openaiApiKey: process.env.OPENAI_API_KEY,
     mistralApiKey: process.env.MISTRAL_API_KEY,
     mistralModel: process.env.MISTRAL_MODEL,
+    mistralTtsModel: process.env.MISTRAL_TTS_MODEL,
+    mistralTtsVoiceId: process.env.MISTRAL_TTS_VOICE_ID,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     maxTurns: parseInt(process.env.MAX_TURNS || '10', 10),
@@ -83,7 +87,17 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
     config.twilioApiSecret || '',
   );
 
-  cachedProviders = { telephony, brain, callStore };
+  let tts: TTSPort | undefined;
+  if (config.mistralApiKey && config.mistralTtsVoiceId) {
+    const { MistralTTSAdapter } = await import('../../adapters/mistral-tts.adapter');
+    tts = new MistralTTSAdapter(
+      config.mistralApiKey,
+      config.mistralTtsVoiceId,
+      config.mistralTtsModel || 'voxtral-mini-tts-2603',
+    );
+  }
+
+  cachedProviders = { telephony, brain, callStore, tts };
   return cachedProviders;
 }
 
