@@ -33,8 +33,10 @@ export interface TelephonyPort {
     actions: VoiceAction[],
     options?: {
       webhookBaseUrl?: string;
+      callSessionId?: string;
       useTts?: boolean;
       ttsFormat?: 'mp3' | 'wav' | 'opus' | 'pcm' | 'flac';
+      ttsTokenSecret?: string;
     },
   ): string;
   validateWebhookSignature(

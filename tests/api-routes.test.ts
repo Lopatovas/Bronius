@@ -189,19 +189,56 @@ describe('tts API routes', () => {
     expect(buf.length).toBe(4);
     expect(Array.from(buf)).toEqual([1, 2, 3, 4]);
   });
+
+  it('GET /api/v1/tts returns audio when token is valid (no plain text required)', async () => {
+    vi.stubEnv('TTS_TOKEN_SECRET', 'secret');
+
+    const tts: TTSPort = {
+      synthesize: async (text) => ({
+        contentType: 'audio/mpeg',
+        audio: new TextEncoder().encode(text),
+      }),
+    };
+
+    createProvidersFromInstances({
+      telephony: new StubTelephony(),
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+      tts,
+    });
+
+    const payload = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        exp: Math.floor(Date.now() / 1000) + 30,
+        callSessionId: 'sess-1',
+        text: 'Token hello',
+        format: 'mp3',
+        voice: null,
+      }),
+      'utf8',
+    ).toString('base64url');
+    const { createHmac } = await import('crypto');
+    const sig = createHmac('sha256', 'secret').update(payload, 'utf8').digest('base64url');
+    const token = `${payload}.${sig}`;
+
+    const { GET } = await import('@/app/api/v1/tts/route');
+    const res = await GET(new NextRequest(`http://localhost/api/v1/tts?token=${encodeURIComponent(token)}`));
+    expect(res.status).toBe(200);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    expect(new TextDecoder().decode(buf)).toBe('Token hello');
+  });
 });
 
 describe('telephony events webhook (signature)', () => {
-  const origNodeEnv = process.env.NODE_ENV;
-
   beforeEach(() => {
     resetAll();
     vi.unstubAllEnvs();
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = origNodeEnv;
+    vi.unstubAllEnvs();
   });
 
   it('returns 403 when signature is present but invalid', async () => {
@@ -239,7 +276,7 @@ describe('telephony events webhook (signature)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 200 when signature header is missing (skips validation)', async () => {
+  it('returns 403 when signature header is missing in production', async () => {
     const store = new InMemoryCallStoreAdapter();
     createProvidersFromInstances({
       telephony: {
@@ -272,6 +309,6 @@ describe('telephony events webhook (signature)', () => {
       body,
     });
     const res = await POST(req);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 });

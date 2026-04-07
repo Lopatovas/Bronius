@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { TelephonyPort, PlaceCallParams, PlaceCallResult, VoiceAction } from '../core/ports/telephony.port';
 import { NormalizedProviderEvent } from '../core/domain/events';
 
@@ -15,10 +15,12 @@ function escapeXml(text: string): string {
 
 function buildTwiml(
   actions: VoiceAction[],
-  options?: { webhookBaseUrl?: string; useTts?: boolean; ttsFormat?: string },
+  options?: { webhookBaseUrl?: string; callSessionId?: string; useTts?: boolean; ttsFormat?: string; ttsTokenSecret?: string },
 ): string {
   const webhookBaseUrl = options?.webhookBaseUrl;
-  const useTts = Boolean(options?.useTts && webhookBaseUrl);
+  const callSessionId = options?.callSessionId;
+  const ttsTokenSecret = options?.ttsTokenSecret;
+  const useTts = Boolean(options?.useTts && webhookBaseUrl && callSessionId && ttsTokenSecret);
   const ttsFormat = options?.ttsFormat || 'mp3';
 
   let body = '';
@@ -26,9 +28,26 @@ function buildTwiml(
     switch (action.type) {
       case 'say':
         if (useTts) {
+          if (!ttsTokenSecret) {
+            body += `<Say voice="${action.voice || 'Polly.Amy'}">${escapeXml(action.text || '')}</Say>`;
+            break;
+          }
+
           const text = action.text || '';
-          const voice = action.voice ? `&voice=${encodeURIComponent(action.voice)}` : '';
-          const url = `${webhookBaseUrl}/api/v1/tts?text=${encodeURIComponent(text)}&format=${encodeURIComponent(ttsFormat)}${voice}`;
+          const payload = Buffer.from(
+            JSON.stringify({
+              v: 1,
+              exp: Math.floor(Date.now() / 1000) + 60,
+              callSessionId,
+              text,
+              format: ttsFormat,
+              voice: action.voice || null,
+            }),
+            'utf8',
+          ).toString('base64url');
+          const sig = createHmac('sha256', ttsTokenSecret).update(payload, 'utf8').digest('base64url');
+          const token = `${payload}.${sig}`;
+          const url = `${webhookBaseUrl}/api/v1/tts?token=${encodeURIComponent(token)}`;
           body += `<Play>${escapeXml(url)}</Play>`;
         } else {
           body += `<Say voice="${action.voice || 'Polly.Amy'}">${escapeXml(action.text || '')}</Say>`;
@@ -206,7 +225,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
 
   respondWithVoiceActions(
     actions: VoiceAction[],
-    options?: { webhookBaseUrl?: string; useTts?: boolean; ttsFormat?: 'mp3' | 'wav' | 'opus' | 'pcm' | 'flac' },
+    options?: { webhookBaseUrl?: string; callSessionId?: string; useTts?: boolean; ttsFormat?: 'mp3' | 'wav' | 'opus' | 'pcm' | 'flac'; ttsTokenSecret?: string },
   ): string {
     return buildTwiml(actions, options);
   }
@@ -229,6 +248,9 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
       .update(data, 'utf-8')
       .digest('base64');
 
-    return computed === signature;
+    const a = Buffer.from(computed, 'utf8');
+    const b = Buffer.from(signature, 'utf8');
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
   }
 }

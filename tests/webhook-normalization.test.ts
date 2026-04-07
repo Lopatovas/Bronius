@@ -155,11 +155,16 @@ describe('TwiML Generation', () => {
   it('should generate Play TwiML for Say action when TTS is enabled', () => {
     const twiml = adapter.respondWithVoiceActions(
       [{ type: 'say', text: 'Hello there!' }],
-      { webhookBaseUrl: 'https://example.com', useTts: true, ttsFormat: 'mp3' },
+      {
+        webhookBaseUrl: 'https://example.com',
+        callSessionId: 'sess-1',
+        useTts: true,
+        ttsFormat: 'mp3',
+        ttsTokenSecret: 'secret',
+      },
     );
     expect(twiml).toContain('<Play>');
-    expect(twiml).toContain('https://example.com/api/v1/tts?text=');
-    expect(twiml).toContain('&amp;format=mp3');
+    expect(twiml).toContain('https://example.com/api/v1/tts?token=');
     expect(twiml).not.toContain('<Say');
   });
 
