@@ -190,3 +190,88 @@ describe('tts API routes', () => {
     expect(Array.from(buf)).toEqual([1, 2, 3, 4]);
   });
 });
+
+describe('telephony events webhook (signature)', () => {
+  const origNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    resetAll();
+    vi.unstubAllEnvs();
+    process.env.NODE_ENV = 'production';
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = origNodeEnv;
+  });
+
+  it('returns 403 when signature is present but invalid', async () => {
+    createProvidersFromInstances({
+      telephony: {
+        async placeCall() {
+          return { providerCallId: 'stub' };
+        },
+        async hangupCall() {},
+        normalizeProviderEvent() {
+          return { type: 'completed', providerCallId: 'CA1', timestamp: new Date() };
+        },
+        respondWithVoiceActions() {
+          return '<Response/>';
+        },
+        validateWebhookSignature() {
+          return false;
+        },
+      },
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+    });
+
+    const { POST } = await import('@/app/api/v1/telephony/events/route');
+    const body = new URLSearchParams({ CallSid: 'CA1', CallStatus: 'completed' }).toString();
+    const req = new NextRequest('http://localhost/api/v1/telephony/events?callSessionId=sess-1', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-twilio-signature': 'sig',
+      },
+      body,
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 200 when signature header is missing (skips validation)', async () => {
+    const store = new InMemoryCallStoreAdapter();
+    createProvidersFromInstances({
+      telephony: {
+        async placeCall() {
+          return { providerCallId: 'stub' };
+        },
+        async hangupCall() {},
+        normalizeProviderEvent() {
+          return { type: 'completed', providerCallId: 'CA1', timestamp: new Date() };
+        },
+        respondWithVoiceActions() {
+          return '<Response/>';
+        },
+        validateWebhookSignature() {
+          return false;
+        },
+      },
+      brain: new MockBrainAdapter(),
+      callStore: store,
+    });
+
+    // Ensure the call session exists so the real controller can process the event.
+    await store.createSession({ id: 'sess-2', toNumber: '+15551234567' });
+
+    const { POST } = await import('@/app/api/v1/telephony/events/route');
+    const body = new URLSearchParams({ CallSid: 'CA1', CallStatus: 'completed' }).toString();
+    const req = new NextRequest('http://localhost/api/v1/telephony/events?callSessionId=sess-2', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+  });
+});
