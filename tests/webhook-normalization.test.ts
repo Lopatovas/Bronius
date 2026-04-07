@@ -217,7 +217,7 @@ describe('Webhook Signature Validation', () => {
   it('should validate correct HMAC-SHA1 signature', async () => {
     const { createHmac } = await import('crypto');
     const secret = 'test_secret_123';
-    const adapter = new TwilioTelephonyAdapter('AC_test', 'SK_test', secret);
+    const adapter = new TwilioTelephonyAdapter('AC_test', 'SK_test', 'api_secret_unused', secret);
 
     const url = 'https://example.com/api/v1/telephony/events';
     const params = { CallSid: 'CA123', CallStatus: 'ringing' };

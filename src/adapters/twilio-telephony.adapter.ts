@@ -58,6 +58,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     private accountSid: string,
     private apiKey: string,
     private apiSecret: string,
+    private webhookAuthToken?: string,
   ) {}
 
   private assertConfigured(): void {
@@ -215,7 +216,8 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
     url: string,
     params: Record<string, string>,
   ): boolean {
-    if (!this.apiSecret) return false;
+    const token = this.webhookAuthToken;
+    if (!token) return false;
 
     const sortedKeys = Object.keys(params).sort();
     let data = url;
@@ -223,7 +225,7 @@ export class TwilioTelephonyAdapter implements TelephonyPort {
       data += key + params[key];
     }
 
-    const computed = createHmac('sha1', this.apiSecret)
+    const computed = createHmac('sha1', token)
       .update(data, 'utf-8')
       .digest('base64');
 

@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('x-twilio-signature') || '';
     const requestUrl = `${req.nextUrl.origin}${req.nextUrl.pathname}${req.nextUrl.search}`;
 
+    // Twilio signature validation requires TWILIO_AUTH_TOKEN (not the API Key secret).
+    // If it's not configured, we skip validation to avoid blocking calls.
     if (process.env.NODE_ENV === 'production' && signature) {
       const valid = providers.telephony.validateWebhookSignature(signature, requestUrl, rawPayload);
       if (!valid) {

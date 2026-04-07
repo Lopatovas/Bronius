@@ -9,6 +9,7 @@ export interface ProviderConfig {
   twilioAccountSid?: string;
   twilioApiKey?: string;
   twilioApiSecret?: string;
+  twilioAuthToken?: string;
   twilioPhoneNumber?: string;
   openaiApiKey?: string;
   mistralApiKey?: string;
@@ -38,6 +39,7 @@ export function loadConfigFromEnv(): ProviderConfig {
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
     twilioApiKey: process.env.TWILIO_API_KEY,
     twilioApiSecret: process.env.TWILIO_API_SECRET,
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER,
     openaiApiKey: process.env.OPENAI_API_KEY,
     mistralApiKey: process.env.MISTRAL_API_KEY,
@@ -85,6 +87,7 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
     config.twilioAccountSid || '',
     config.twilioApiKey || '',
     config.twilioApiSecret || '',
+    config.twilioAuthToken,
   );
 
   let tts: TTSPort | undefined;
