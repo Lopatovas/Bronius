@@ -332,31 +332,36 @@ export default function Home() {
 
     try {
       browserAutoplayArmedRef.current = true;
-      const brainRes = await fetch('/api/v1/debug/brain-ping', {
+      const res = await fetch('/api/v1/browser/turn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ text }),
       });
-      const brainData = (await brainRes.json().catch(() => null)) as null | { reply?: { text?: string } };
-      if (!brainRes.ok) {
-        setBrowserTurnError(`Brain failed (HTTP ${brainRes.status})`);
+      const data = (await res.json().catch(() => null)) as
+        | null
+        | { error?: string; replyText?: string; audioBase64?: string; audioContentType?: string };
+
+      if (!res.ok) {
+        setBrowserTurnError(data?.error || `Request failed (HTTP ${res.status})`);
         return;
       }
 
-      const replyText = brainData?.reply?.text?.trim() || '';
+      const replyText = data?.replyText?.trim() || '';
       if (!replyText) {
-        setBrowserTurnError('Brain returned an empty reply');
+        setBrowserTurnError('Empty reply');
         return;
       }
       setBrowserTurnReply(replyText);
 
-      const ttsRes = await fetch(`/api/v1/tts?text=${encodeURIComponent(replyText)}&format=mp3`);
-      if (!ttsRes.ok) {
-        const j = (await ttsRes.json().catch(() => null)) as null | { error?: string };
-        setBrowserTurnError(j?.error || `TTS failed (HTTP ${ttsRes.status})`);
+      const b64 = data?.audioBase64 || '';
+      const contentType = data?.audioContentType || 'audio/mpeg';
+      if (!b64) {
+        setBrowserTurnError('Missing audio');
         return;
       }
-      const blob = await ttsRes.blob();
+
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: contentType });
       setBrowserTurnAudioUrl(URL.createObjectURL(blob));
     } catch (e) {
       setBrowserTurnError(e instanceof Error ? e.message : 'Request failed');

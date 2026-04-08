@@ -1,0 +1,52 @@
+import type { BrowserVoicePort, BrowserVoiceTurnRequest, BrowserVoiceTurnResponse } from '@/core/ports/browser-voice.port';
+import type { RegisteredProviders } from '@/core/modules/provider-registry';
+import type { CallController } from '@/core/modules/call-controller';
+import { generateId } from '@/lib/id';
+
+export class BrowserVoiceAdapter implements BrowserVoicePort {
+  constructor(
+    private controller: CallController,
+    private providers: RegisteredProviders,
+  ) {}
+
+  async handleTextTurn(req: BrowserVoiceTurnRequest): Promise<BrowserVoiceTurnResponse> {
+    if (req.audioBase64) {
+      // Placeholder: once we add mic streaming, this becomes STT -> text -> same flow.
+      throw new Error('audioBase64 input is not supported yet (STT not implemented).');
+    }
+
+    const text = req.text.trim();
+    if (!text) throw new Error('Missing text');
+
+    const callSessionId = req.callSessionId || `browser-${generateId()}`;
+
+    const existing = await this.providers.callStore.getSession(callSessionId);
+    if (!existing) {
+      await this.providers.callStore.createSession({ id: callSessionId, toNumber: 'browser' });
+      // Put the session into a state where `handleGatherResult` transitions cleanly.
+      await this.controller.transitionStatus(callSessionId, 'CONNECTED');
+    }
+
+    const actions = await this.controller.handleGatherResult(callSessionId, text, 1.0);
+    const replyText =
+      actions.find((a) => a.type === 'say' && a.text && a.text.trim())?.text?.trim() || '';
+
+    if (!replyText) {
+      throw new Error('No reply produced');
+    }
+
+    if (!this.providers.tts) {
+      throw new Error('TTS not configured');
+    }
+
+    const audio = await this.providers.tts.synthesize(replyText, { format: 'mp3' });
+
+    return {
+      callSessionId,
+      replyText,
+      audioContentType: audio.contentType,
+      audioBase64: Buffer.from(audio.audio).toString('base64'),
+    };
+  }
+}
+
