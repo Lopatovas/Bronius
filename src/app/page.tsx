@@ -74,6 +74,8 @@ export default function Home() {
   const [browserTurnError, setBrowserTurnError] = useState<string | null>(null);
   const [browserTurnReply, setBrowserTurnReply] = useState<string | null>(null);
   const [browserTurnAudioUrl, setBrowserTurnAudioUrl] = useState<string | null>(null);
+  const browserAudioRef = useRef<HTMLAudioElement | null>(null);
+  const browserAutoplayArmedRef = useRef(false);
 
   const urlHydratedRef = useRef(false);
 
@@ -329,6 +331,7 @@ export default function Home() {
     }
 
     try {
+      browserAutoplayArmedRef.current = true;
       const brainRes = await fetch('/api/v1/debug/brain-ping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -366,6 +369,26 @@ export default function Home() {
     return () => {
       if (browserTurnAudioUrl) URL.revokeObjectURL(browserTurnAudioUrl);
     };
+  }, [browserTurnAudioUrl]);
+
+  useEffect(() => {
+    const el = browserAudioRef.current;
+    if (!browserTurnAudioUrl || !el) return;
+    if (!browserAutoplayArmedRef.current) return;
+
+    browserAutoplayArmedRef.current = false;
+
+    // Attempt to auto-play as part of the user gesture flow.
+    // If the browser blocks autoplay, the controls still allow manual play.
+    const tryPlay = async () => {
+      try {
+        el.currentTime = 0;
+        await el.play();
+      } catch {
+        // ignore autoplay failures
+      }
+    };
+    void tryPlay();
   }, [browserTurnAudioUrl]);
 
   const statusColor = (status: string) => {
@@ -661,7 +684,7 @@ export default function Home() {
             )}
             {browserTurnAudioUrl && (
               <div style={{ marginTop: 12 }}>
-                <audio controls src={browserTurnAudioUrl} style={{ width: '100%' }} />
+                <audio ref={browserAudioRef} controls src={browserTurnAudioUrl} style={{ width: '100%' }} />
               </div>
             )}
           </div>
