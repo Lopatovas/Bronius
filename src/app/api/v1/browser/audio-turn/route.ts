@@ -11,6 +11,9 @@ export async function POST(req: NextRequest) {
     }
 
     const callSessionId = form.get('callSessionId')?.toString() || undefined;
+    if (!callSessionId) {
+      return NextResponse.json({ error: 'Missing callSessionId (start a browser call first)' }, { status: 400 });
+    }
     const mimeType = file.type || 'audio/webm';
     const buf = new Uint8Array(await file.arrayBuffer());
 

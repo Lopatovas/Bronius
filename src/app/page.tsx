@@ -76,6 +76,7 @@ export default function Home() {
   const [browserTurnAudioUrl, setBrowserTurnAudioUrl] = useState<string | null>(null);
   const [browserRecording, setBrowserRecording] = useState(false);
   const [browserSttText, setBrowserSttText] = useState<string | null>(null);
+  const [browserCallSessionId, setBrowserCallSessionId] = useState<string | null>(null);
   const browserAudioRef = useRef<HTMLAudioElement | null>(null);
   const browserAutoplayArmedRef = useRef(false);
   const browserRecorderRef = useRef<MediaRecorder | null>(null);
@@ -324,6 +325,10 @@ export default function Home() {
   const runBrowserTurn = async () => {
     const text = browserTurnText.trim();
     if (!text) return;
+    if (!browserCallSessionId) {
+      setBrowserTurnError('Start a browser call first');
+      return;
+    }
 
     setBrowserTurnBusy(true);
     setBrowserTurnError(null);
@@ -339,7 +344,7 @@ export default function Home() {
       const res = await fetch('/api/v1/browser/turn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ callSessionId: browserCallSessionId, text }),
       });
       const data = (await res.json().catch(() => null)) as
         | null
@@ -389,6 +394,11 @@ export default function Home() {
     setBrowserSttText(null);
     setBrowserTurnReply(null);
 
+    if (!browserCallSessionId) {
+      setBrowserTurnError('Start a browser call first');
+      return;
+    }
+
     if (browserTurnAudioUrl) {
       URL.revokeObjectURL(browserTurnAudioUrl);
       setBrowserTurnAudioUrl(null);
@@ -429,6 +439,7 @@ export default function Home() {
       const blob = new Blob(browserChunksRef.current, { type: 'audio/webm' });
       const form = new FormData();
       form.append('audio', blob, 'audio.webm');
+      if (browserCallSessionId) form.append('callSessionId', browserCallSessionId);
 
       const res = await fetch('/api/v1/browser/audio-turn', {
         method: 'POST',
@@ -478,6 +489,83 @@ export default function Home() {
       if (browserTurnAudioUrl) URL.revokeObjectURL(browserTurnAudioUrl);
     };
   }, [browserTurnAudioUrl]);
+
+  const startBrowserCall = async () => {
+    setBrowserTurnError(null);
+    setBrowserSttText(null);
+    setBrowserTurnReply(null);
+
+    if (browserTurnAudioUrl) {
+      URL.revokeObjectURL(browserTurnAudioUrl);
+      setBrowserTurnAudioUrl(null);
+    }
+
+    setBrowserTurnBusy(true);
+    browserAutoplayArmedRef.current = true;
+
+    try {
+      const res = await fetch('/api/v1/browser/start', { method: 'POST' });
+      const data = (await res.json().catch(() => null)) as
+        | null
+        | {
+            error?: string;
+            callSessionId?: string;
+            replyText?: string;
+            audioBase64?: string;
+            audioContentType?: string;
+          };
+      if (!res.ok) {
+        setBrowserTurnError(data?.error || `Start failed (HTTP ${res.status})`);
+        return;
+      }
+
+      const id = data?.callSessionId || null;
+      if (!id) {
+        setBrowserTurnError('Start failed: missing callSessionId');
+        return;
+      }
+      setBrowserCallSessionId(id);
+
+      const replyText = data?.replyText?.trim() || '';
+      if (replyText) setBrowserTurnReply(replyText);
+
+      const b64 = data?.audioBase64 || '';
+      const contentType = data?.audioContentType || 'audio/mpeg';
+      if (b64) {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        setBrowserTurnAudioUrl(URL.createObjectURL(new Blob([bytes], { type: contentType })));
+      }
+    } catch (e) {
+      setBrowserTurnError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBrowserTurnBusy(false);
+    }
+  };
+
+  const endBrowserCall = async () => {
+    if (!browserCallSessionId) return;
+    setBrowserTurnBusy(true);
+    setBrowserTurnError(null);
+    try {
+      await fetch('/api/v1/browser/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callSessionId: browserCallSessionId }),
+      });
+    } catch {
+      // ignore end errors
+    } finally {
+      setBrowserCallSessionId(null);
+      setBrowserRecording(false);
+      setBrowserSttText(null);
+      setBrowserTurnReply(null);
+      if (browserTurnAudioUrl) {
+        URL.revokeObjectURL(browserTurnAudioUrl);
+        setBrowserTurnAudioUrl(null);
+      }
+      setBrowserTurnBusy(false);
+    }
+  };
 
   useEffect(() => {
     const el = browserAudioRef.current;
@@ -710,11 +798,50 @@ export default function Home() {
               Two modes: record audio (STT → brain → TTS) or type text (no STT) to exercise the flow without Twilio.
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => void startBrowserCall()}
+                disabled={browserTurnBusy || Boolean(browserCallSessionId)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: browserTurnBusy || browserCallSessionId ? '#475569' : '#3b82f6',
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: browserTurnBusy || browserCallSessionId ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {browserCallSessionId ? 'Call started' : 'Start call'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void endBrowserCall()}
+                disabled={browserTurnBusy || !browserCallSessionId}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  border: '1px solid #475569',
+                  background: '#1e293b',
+                  color: '#e2e8f0',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: browserTurnBusy || !browserCallSessionId ? 'not-allowed' : 'pointer',
+                }}
+              >
+                End call
+              </button>
+              <span style={{ fontSize: 12, color: '#64748b', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                {browserCallSessionId ? `session ${browserCallSessionId}` : 'no active session'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               {!browserRecording ? (
                 <button
                   type="button"
                   onClick={() => void startBrowserRecording()}
-                  disabled={browserTurnBusy}
+                  disabled={browserTurnBusy || !browserCallSessionId}
                   style={{
                     padding: '10px 18px',
                     borderRadius: 8,
@@ -723,7 +850,7 @@ export default function Home() {
                     color: 'white',
                     fontSize: 14,
                     fontWeight: 600,
-                    cursor: browserTurnBusy ? 'not-allowed' : 'pointer',
+                    cursor: browserTurnBusy || !browserCallSessionId ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Record
@@ -773,7 +900,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={runBrowserTurn}
-                disabled={browserTurnBusy || browserRecording || !browserTurnText.trim()}
+                disabled={browserTurnBusy || browserRecording || !browserCallSessionId || !browserTurnText.trim()}
                 style={{
                   padding: '10px 18px',
                   borderRadius: 8,
@@ -782,7 +909,7 @@ export default function Home() {
                   color: 'white',
                   fontSize: 14,
                   fontWeight: 600,
-                  cursor: browserTurnBusy || !browserTurnText.trim() ? 'not-allowed' : 'pointer',
+                  cursor: browserTurnBusy || !browserCallSessionId || !browserTurnText.trim() ? 'not-allowed' : 'pointer',
                 }}
               >
                 {browserTurnBusy ? 'Running…' : 'Send'}
