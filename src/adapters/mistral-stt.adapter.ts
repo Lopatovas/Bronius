@@ -21,7 +21,8 @@ export class MistralSTTAdapter implements STTPort {
     form.append('model', this.model);
     if (params.language) form.append('language', params.language);
 
-    const blob = new Blob([params.audio], { type: params.mimeType || 'application/octet-stream' });
+    // Use Buffer to satisfy Node/DOM BlobPart typing in TS.
+    const blob = new Blob([Buffer.from(params.audio)], { type: params.mimeType || 'application/octet-stream' });
     form.append('file', blob, 'audio.webm');
 
     const res = await fetch(`${MISTRAL_API_BASE}/audio/transcriptions`, {
