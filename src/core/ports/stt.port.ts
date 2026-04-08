@@ -4,5 +4,5 @@ export interface STTResult {
 }
 
 export interface STTPort {
-  transcribe(audioUrl: string): Promise<STTResult>;
+  transcribe(params: { audio: Uint8Array; mimeType: string; language?: string }): Promise<STTResult>;
 }
