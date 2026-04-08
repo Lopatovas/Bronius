@@ -81,6 +81,31 @@ export default function Home() {
   const browserAutoplayArmedRef = useRef(false);
   const browserRecorderRef = useRef<MediaRecorder | null>(null);
   const browserChunksRef = useRef<BlobPart[]>([]);
+  const browserStreamRef = useRef<MediaStream | null>(null);
+  const browserAudioCtxRef = useRef<AudioContext | null>(null);
+  const browserVadRafRef = useRef<number | null>(null);
+  const browserStoppingRef = useRef(false);
+
+  const stopBrowserAudioPipeline = () => {
+    if (browserVadRafRef.current != null) {
+      cancelAnimationFrame(browserVadRafRef.current);
+      browserVadRafRef.current = null;
+    }
+    const ctx = browserAudioCtxRef.current;
+    browserAudioCtxRef.current = null;
+    if (ctx) {
+      try {
+        void ctx.close();
+      } catch {
+        // ignore
+      }
+    }
+    const stream = browserStreamRef.current;
+    browserStreamRef.current = null;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  };
 
   const urlHydratedRef = useRef(false);
 
@@ -405,15 +430,69 @@ export default function Home() {
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    browserStreamRef.current = stream;
+
+    // VAD (simple RMS-based): auto-stop after sustained silence.
+    // This is a POC-friendly approximation; streaming STT will replace this as the canonical EoU signal later.
+    const ctx = new AudioContext();
+    browserAudioCtxRef.current = ctx;
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+
+    const SILENCE_MS_TO_STOP = 850;
+    const START_SPEECH_MS = 180;
+    const MAX_UTTERANCE_MS = 15000;
+    const RMS_THRESHOLD = 0.015;
+
+    let startedAt = performance.now();
+    let speechMs = 0;
+    let silenceMs = 0;
+    let speechDetected = false;
+
+    const tick = () => {
+      analyser.getFloatTimeDomainData(buf);
+      let sumSq = 0;
+      for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
+      const rms = Math.sqrt(sumSq / buf.length);
+
+      const now = performance.now();
+      const above = rms >= RMS_THRESHOLD;
+
+      if (above) {
+        speechMs += 16;
+        silenceMs = 0;
+        if (!speechDetected && speechMs >= START_SPEECH_MS) speechDetected = true;
+      } else {
+        silenceMs += 16;
+      }
+
+      const elapsed = now - startedAt;
+      if (elapsed >= MAX_UTTERANCE_MS) {
+        browserVadRafRef.current = null;
+        void stopBrowserRecording();
+        return;
+      }
+
+      if (speechDetected && silenceMs >= SILENCE_MS_TO_STOP) {
+        browserVadRafRef.current = null;
+        void stopBrowserRecording();
+        return;
+      }
+
+      browserVadRafRef.current = requestAnimationFrame(tick);
+    };
+    browserVadRafRef.current = requestAnimationFrame(tick);
+
     const recorder = new MediaRecorder(stream);
     browserChunksRef.current = [];
     recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) browserChunksRef.current.push(e.data);
     };
-    recorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-    };
     browserRecorderRef.current = recorder;
+    browserStoppingRef.current = false;
     setBrowserRecording(true);
     recorder.start();
   };
@@ -421,6 +500,8 @@ export default function Home() {
   const stopBrowserRecording = async () => {
     const recorder = browserRecorderRef.current;
     if (!recorder) return;
+    if (browserStoppingRef.current) return;
+    browserStoppingRef.current = true;
 
     setBrowserTurnBusy(true);
     setBrowserTurnError(null);
@@ -428,13 +509,14 @@ export default function Home() {
     browserAutoplayArmedRef.current = true;
 
     const stopped = new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve();
+      recorder.addEventListener('stop', () => resolve(), { once: true });
       recorder.stop();
     });
 
     try {
       await stopped;
       setBrowserRecording(false);
+      stopBrowserAudioPipeline();
 
       const blob = new Blob(browserChunksRef.current, { type: 'audio/webm' });
       const form = new FormData();
@@ -481,6 +563,7 @@ export default function Home() {
       setBrowserTurnBusy(false);
       browserRecorderRef.current = null;
       browserChunksRef.current = [];
+      browserStoppingRef.current = false;
     }
   };
 
@@ -559,6 +642,7 @@ export default function Home() {
       setBrowserRecording(false);
       setBrowserSttText(null);
       setBrowserTurnReply(null);
+      stopBrowserAudioPipeline();
       if (browserTurnAudioUrl) {
         URL.revokeObjectURL(browserTurnAudioUrl);
         setBrowserTurnAudioUrl(null);
