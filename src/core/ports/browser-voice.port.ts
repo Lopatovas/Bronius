@@ -15,6 +15,8 @@ export interface BrowserVoiceTurnResponse {
   replyText: string;
   audioContentType: string;
   audioBase64: string;
+  status?: string;
+  endReason?: string;
 }
 
 export interface BrowserVoicePort {

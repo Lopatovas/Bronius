@@ -44,6 +44,8 @@ export class BrowserVoiceAdapter implements BrowserVoicePort {
       throw new Error('No reply produced');
     }
 
+    const sessionAfter = await this.providers.callStore.getSession(callSessionId);
+
     if (!this.providers.tts) {
       throw new Error('TTS not configured');
     }
@@ -55,6 +57,8 @@ export class BrowserVoiceAdapter implements BrowserVoicePort {
       replyText,
       audioContentType: audio.contentType,
       audioBase64: Buffer.from(audio.audio).toString('base64'),
+      status: sessionAfter?.status,
+      endReason: sessionAfter?.endReason,
     };
   }
 }

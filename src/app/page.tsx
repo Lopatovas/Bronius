@@ -343,7 +343,14 @@ export default function Home() {
       });
       const data = (await res.json().catch(() => null)) as
         | null
-        | { error?: string; replyText?: string; audioBase64?: string; audioContentType?: string };
+        | {
+            error?: string;
+            replyText?: string;
+            audioBase64?: string;
+            audioContentType?: string;
+            status?: string;
+            endReason?: string;
+          };
 
       if (!res.ok) {
         setBrowserTurnError(data?.error || `Request failed (HTTP ${res.status})`);
@@ -356,6 +363,9 @@ export default function Home() {
         return;
       }
       setBrowserTurnReply(replyText);
+      if (data?.status === 'FAILED') {
+        setBrowserTurnError(`Call failed${data.endReason ? `: ${data.endReason}` : ''}`);
+      }
 
       const b64 = data?.audioBase64 || '';
       const contentType = data?.audioContentType || 'audio/mpeg';
