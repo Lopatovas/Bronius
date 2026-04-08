@@ -74,8 +74,12 @@ export default function Home() {
   const [browserTurnError, setBrowserTurnError] = useState<string | null>(null);
   const [browserTurnReply, setBrowserTurnReply] = useState<string | null>(null);
   const [browserTurnAudioUrl, setBrowserTurnAudioUrl] = useState<string | null>(null);
+  const [browserRecording, setBrowserRecording] = useState(false);
+  const [browserSttText, setBrowserSttText] = useState<string | null>(null);
   const browserAudioRef = useRef<HTMLAudioElement | null>(null);
   const browserAutoplayArmedRef = useRef(false);
+  const browserRecorderRef = useRef<MediaRecorder | null>(null);
+  const browserChunksRef = useRef<BlobPart[]>([]);
 
   const urlHydratedRef = useRef(false);
 
@@ -370,6 +374,95 @@ export default function Home() {
     }
   };
 
+  const startBrowserRecording = async () => {
+    setBrowserTurnError(null);
+    setBrowserSttText(null);
+    setBrowserTurnReply(null);
+
+    if (browserTurnAudioUrl) {
+      URL.revokeObjectURL(browserTurnAudioUrl);
+      setBrowserTurnAudioUrl(null);
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    browserChunksRef.current = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) browserChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+    };
+    browserRecorderRef.current = recorder;
+    setBrowserRecording(true);
+    recorder.start();
+  };
+
+  const stopBrowserRecording = async () => {
+    const recorder = browserRecorderRef.current;
+    if (!recorder) return;
+
+    setBrowserTurnBusy(true);
+    setBrowserTurnError(null);
+    setBrowserSttText(null);
+    browserAutoplayArmedRef.current = true;
+
+    const stopped = new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+
+    try {
+      await stopped;
+      setBrowserRecording(false);
+
+      const blob = new Blob(browserChunksRef.current, { type: 'audio/webm' });
+      const form = new FormData();
+      form.append('audio', blob, 'audio.webm');
+
+      const res = await fetch('/api/v1/browser/audio-turn', {
+        method: 'POST',
+        body: form,
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | null
+        | {
+            error?: string;
+            sttText?: string;
+            replyText?: string;
+            audioBase64?: string;
+            audioContentType?: string;
+          };
+
+      if (!res.ok) {
+        setBrowserTurnError(data?.error || `Request failed (HTTP ${res.status})`);
+        return;
+      }
+
+      const sttText = data?.sttText?.trim() || '';
+      if (sttText) setBrowserSttText(sttText);
+
+      const replyText = data?.replyText?.trim() || '';
+      if (replyText) setBrowserTurnReply(replyText);
+
+      const b64 = data?.audioBase64 || '';
+      const contentType = data?.audioContentType || 'audio/mpeg';
+      if (!b64) {
+        setBrowserTurnError('Missing audio');
+        return;
+      }
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      setBrowserTurnAudioUrl(URL.createObjectURL(new Blob([bytes], { type: contentType })));
+    } catch (e) {
+      setBrowserTurnError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBrowserTurnBusy(false);
+      browserRecorderRef.current = null;
+      browserChunksRef.current = [];
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (browserTurnAudioUrl) URL.revokeObjectURL(browserTurnAudioUrl);
@@ -604,15 +697,57 @@ export default function Home() {
               Browser voice channel (no STT yet)
             </label>
             <p style={{ color: '#94a3b8', fontSize: 13, marginTop: 0, marginBottom: 10, lineHeight: 1.5 }}>
-              Type an utterance, Bronius replies via the LLM brain, then we synthesize that reply with TTS and play it in the browser.
+              Two modes: record audio (STT → brain → TTS) or type text (no STT) to exercise the flow without Twilio.
             </p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              {!browserRecording ? (
+                <button
+                  type="button"
+                  onClick={() => void startBrowserRecording()}
+                  disabled={browserTurnBusy}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: browserTurnBusy ? '#475569' : '#ef4444',
+                    color: 'white',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: browserTurnBusy ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Record
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void stopBrowserRecording()}
+                  disabled={browserTurnBusy}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: browserTurnBusy ? '#475569' : '#f97316',
+                    color: 'white',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: browserTurnBusy ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Stop &amp; send
+                </button>
+              )}
+              <span style={{ fontSize: 13, color: browserRecording ? '#fbbf24' : '#64748b' }}>
+                {browserRecording ? 'Recording…' : 'Not recording'}
+              </span>
+            </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="text"
                 value={browserTurnText}
                 onChange={(e) => setBrowserTurnText(e.target.value)}
                 placeholder="Hello"
-                disabled={browserTurnBusy}
+                disabled={browserTurnBusy || browserRecording}
                 style={{
                   flex: 1,
                   minWidth: 220,
@@ -628,7 +763,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={runBrowserTurn}
-                disabled={browserTurnBusy || !browserTurnText.trim()}
+                disabled={browserTurnBusy || browserRecording || !browserTurnText.trim()}
                 style={{
                   padding: '10px 18px',
                   borderRadius: 8,
@@ -685,6 +820,25 @@ export default function Home() {
                   Reply text
                 </div>
                 {browserTurnReply}
+              </div>
+            )}
+            {browserSttText && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  background: '#0f172a',
+                  border: '1px solid #1f2937',
+                  color: '#cbd5e1',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 6, fontWeight: 700 }}>
+                  STT text
+                </div>
+                {browserSttText}
               </div>
             )}
             {browserTurnAudioUrl && (

@@ -10,12 +10,20 @@ export class BrowserVoiceAdapter implements BrowserVoicePort {
   ) {}
 
   async handleTextTurn(req: BrowserVoiceTurnRequest): Promise<BrowserVoiceTurnResponse> {
+    let text = req.text.trim();
     if (req.audioBase64) {
-      // Placeholder: once we add mic streaming, this becomes STT -> text -> same flow.
-      throw new Error('audioBase64 input is not supported yet (STT not implemented).');
+      if (!this.providers.stt) {
+        throw new Error('STT not configured');
+      }
+      const audio = Buffer.from(req.audioBase64, 'base64');
+      const result = await this.providers.stt.transcribe({
+        audio,
+        mimeType: 'audio/webm',
+        language: 'en',
+      });
+      text = result.text.trim();
     }
 
-    const text = req.text.trim();
     if (!text) throw new Error('Missing text');
 
     const callSessionId = req.callSessionId || `browser-${generateId()}`;
