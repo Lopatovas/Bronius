@@ -69,6 +69,12 @@ export default function Home() {
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
 
+  const [browserTurnText, setBrowserTurnText] = useState('Hello');
+  const [browserTurnBusy, setBrowserTurnBusy] = useState(false);
+  const [browserTurnError, setBrowserTurnError] = useState<string | null>(null);
+  const [browserTurnReply, setBrowserTurnReply] = useState<string | null>(null);
+  const [browserTurnAudioUrl, setBrowserTurnAudioUrl] = useState<string | null>(null);
+
   const urlHydratedRef = useRef(false);
 
   const fetchSessionList = useCallback(async () => {
@@ -309,6 +315,59 @@ export default function Home() {
     };
   }, [ttsAudioUrl]);
 
+  const runBrowserTurn = async () => {
+    const text = browserTurnText.trim();
+    if (!text) return;
+
+    setBrowserTurnBusy(true);
+    setBrowserTurnError(null);
+    setBrowserTurnReply(null);
+
+    if (browserTurnAudioUrl) {
+      URL.revokeObjectURL(browserTurnAudioUrl);
+      setBrowserTurnAudioUrl(null);
+    }
+
+    try {
+      const brainRes = await fetch('/api/v1/debug/brain-ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      const brainData = (await brainRes.json().catch(() => null)) as null | { reply?: { text?: string } };
+      if (!brainRes.ok) {
+        setBrowserTurnError(`Brain failed (HTTP ${brainRes.status})`);
+        return;
+      }
+
+      const replyText = brainData?.reply?.text?.trim() || '';
+      if (!replyText) {
+        setBrowserTurnError('Brain returned an empty reply');
+        return;
+      }
+      setBrowserTurnReply(replyText);
+
+      const ttsRes = await fetch(`/api/v1/tts?text=${encodeURIComponent(replyText)}&format=mp3`);
+      if (!ttsRes.ok) {
+        const j = (await ttsRes.json().catch(() => null)) as null | { error?: string };
+        setBrowserTurnError(j?.error || `TTS failed (HTTP ${ttsRes.status})`);
+        return;
+      }
+      const blob = await ttsRes.blob();
+      setBrowserTurnAudioUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setBrowserTurnError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBrowserTurnBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (browserTurnAudioUrl) URL.revokeObjectURL(browserTurnAudioUrl);
+    };
+  }, [browserTurnAudioUrl]);
+
   const statusColor = (status: string) => {
     if (status === 'COMPLETED') return '#22c55e';
     if (status === 'FAILED') return '#ef4444';
@@ -508,6 +567,103 @@ export default function Home() {
               Uses <code>/api/v1/tts</code>. Requires <code>MISTRAL_TTS_VOICE_ID</code> to be set; otherwise it will return
               “TTS not configured”.
             </p>
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label
+              style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8', fontWeight: 600 }}
+            >
+              Browser voice channel (no STT yet)
+            </label>
+            <p style={{ color: '#94a3b8', fontSize: 13, marginTop: 0, marginBottom: 10, lineHeight: 1.5 }}>
+              Type an utterance, Bronius replies via the LLM brain, then we synthesize that reply with TTS and play it in the browser.
+            </p>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={browserTurnText}
+                onChange={(e) => setBrowserTurnText(e.target.value)}
+                placeholder="Hello"
+                disabled={browserTurnBusy}
+                style={{
+                  flex: 1,
+                  minWidth: 220,
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  border: '1px solid #334155',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontSize: 14,
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={runBrowserTurn}
+                disabled={browserTurnBusy || !browserTurnText.trim()}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: browserTurnBusy ? '#475569' : '#22c55e',
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: browserTurnBusy || !browserTurnText.trim() ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {browserTurnBusy ? 'Running…' : 'Send'}
+              </button>
+              {browserTurnAudioUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    URL.revokeObjectURL(browserTurnAudioUrl);
+                    setBrowserTurnAudioUrl(null);
+                  }}
+                  disabled={browserTurnBusy}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 8,
+                    border: '1px solid #475569',
+                    background: '#1e293b',
+                    color: '#e2e8f0',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: browserTurnBusy ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Clear audio
+                </button>
+              )}
+            </div>
+            {browserTurnError && (
+              <p style={{ color: '#f87171', marginTop: 10, fontSize: 14 }}>{browserTurnError}</p>
+            )}
+            {browserTurnReply && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  background: '#0f172a',
+                  border: '1px solid #1f2937',
+                  color: '#cbd5e1',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 6, fontWeight: 700 }}>
+                  Reply text
+                </div>
+                {browserTurnReply}
+              </div>
+            )}
+            {browserTurnAudioUrl && (
+              <div style={{ marginTop: 12 }}>
+                <audio controls src={browserTurnAudioUrl} style={{ width: '100%' }} />
+              </div>
+            )}
           </div>
 
           <div
