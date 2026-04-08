@@ -152,6 +152,22 @@ describe('TwiML Generation', () => {
     expect(twiml).toContain('Polly.Amy');
   });
 
+  it('should generate Play TwiML for Say action when TTS is enabled', () => {
+    const twiml = adapter.respondWithVoiceActions(
+      [{ type: 'say', text: 'Hello there!' }],
+      {
+        webhookBaseUrl: 'https://example.com',
+        callSessionId: 'sess-1',
+        useTts: true,
+        ttsFormat: 'mp3',
+        ttsTokenSecret: 'secret',
+      },
+    );
+    expect(twiml).toContain('<Play>');
+    expect(twiml).toContain('https://example.com/api/v1/tts?token=');
+    expect(twiml).not.toContain('<Say');
+  });
+
   it('should generate valid TwiML for Gather action', () => {
     const twiml = adapter.respondWithVoiceActions([
       {
@@ -206,7 +222,7 @@ describe('Webhook Signature Validation', () => {
   it('should validate correct HMAC-SHA1 signature', async () => {
     const { createHmac } = await import('crypto');
     const secret = 'test_secret_123';
-    const adapter = new TwilioTelephonyAdapter('AC_test', 'SK_test', secret);
+    const adapter = new TwilioTelephonyAdapter('AC_test', 'SK_test', 'api_secret_unused', secret);
 
     const url = 'https://example.com/api/v1/telephony/events';
     const params = { CallSid: 'CA123', CallStatus: 'ringing' };

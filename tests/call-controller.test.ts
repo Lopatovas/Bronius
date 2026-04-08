@@ -38,7 +38,7 @@ class StubTelephonyAdapter implements TelephonyPort {
     };
   }
 
-  respondWithVoiceActions(actions: VoiceAction[]): string {
+  respondWithVoiceActions(actions: VoiceAction[], _options?: unknown): string {
     return `<Response>${actions.map((a) => `<${a.type}/>`).join('')}</Response>`;
   }
 

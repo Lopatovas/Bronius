@@ -33,7 +33,13 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('x-twilio-signature') || '';
     const requestUrl = `${req.nextUrl.origin}${req.nextUrl.pathname}${req.nextUrl.search}`;
 
-    if (process.env.NODE_ENV === 'production' && signature) {
+    // Require Twilio signature validation in production.
+    if (process.env.NODE_ENV === 'production') {
+      if (!signature) {
+        log.warn({ callSessionId }, 'Missing Twilio signature header');
+        return NextResponse.json({ error: 'Missing signature' }, { status: 403 });
+      }
+
       const valid = providers.telephony.validateWebhookSignature(signature, requestUrl, rawPayload);
       if (!valid) {
         log.warn({ callSessionId }, 'Invalid Twilio signature');

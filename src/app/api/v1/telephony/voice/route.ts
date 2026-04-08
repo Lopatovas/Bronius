@@ -24,6 +24,26 @@ export async function POST(req: NextRequest) {
     const controller = await getCallController();
     const providers = await getProviders();
 
+    const formData = await req.formData();
+    const rawPayload: Record<string, string> = {};
+    formData.forEach((value, key) => {
+      rawPayload[key] = value.toString();
+    });
+
+    if (process.env.NODE_ENV === 'production') {
+      const signature = req.headers.get('x-twilio-signature') || '';
+      if (!signature) {
+        log.warn({ callSessionId }, 'Missing Twilio signature header');
+        return twimlResponse(FALLBACK);
+      }
+      const requestUrl = `${req.nextUrl.origin}${req.nextUrl.pathname}${req.nextUrl.search}`;
+      const valid = providers.telephony.validateWebhookSignature(signature, requestUrl, rawPayload);
+      if (!valid) {
+        log.warn({ callSessionId }, 'Invalid Twilio signature');
+        return twimlResponse(FALLBACK);
+      }
+    }
+
     const session = await providers.callStore.getSession(callSessionId);
 
     if (session) {
@@ -47,7 +67,13 @@ export async function POST(req: NextRequest) {
     }
 
     const actions = controller.generateGreeting(callSessionId);
-    const twiml = providers.telephony.respondWithVoiceActions(actions);
+    const twiml = providers.telephony.respondWithVoiceActions(actions, {
+      webhookBaseUrl: req.nextUrl.origin,
+      callSessionId,
+      useTts: Boolean(providers.tts),
+      ttsFormat: 'mp3',
+      ttsTokenSecret: process.env.TTS_TOKEN_SECRET || process.env.TWILIO_AUTH_TOKEN || '',
+    });
 
     return twimlResponse(twiml);
   } catch (err) {

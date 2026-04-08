@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { resetProviders } from '@/core/modules/provider-registry';
+import { createProvidersFromInstances, resetProviders } from '@/core/modules/provider-registry';
 import { resetContainer } from '@/lib/container';
 import { generateId } from '@/lib/id';
+import { InMemoryCallStoreAdapter } from '@/adapters/in-memory-call-store.adapter';
+import { MockBrainAdapter } from '@/adapters/mock-brain.adapter';
+import type { TelephonyPort, PlaceCallResult, VoiceAction } from '@/core/ports/telephony.port';
+import type { NormalizedProviderEvent } from '@/core/domain/events';
+import type { TTSPort } from '@/core/ports/tts.port';
 
 function resetAll() {
   resetContainer();
@@ -124,5 +129,186 @@ describe('call session read API routes', () => {
     const j = (await res.json()) as { turns: Array<{ text: string }> };
     expect(j.turns).toHaveLength(1);
     expect(j.turns[0].text).toBe('Hi');
+  });
+});
+
+describe('tts API routes', () => {
+  beforeEach(() => {
+    resetAll();
+    vi.unstubAllEnvs();
+  });
+
+  class StubTelephony implements TelephonyPort {
+    async placeCall(): Promise<PlaceCallResult> {
+      return { providerCallId: 'stub' };
+    }
+    async hangupCall(): Promise<void> {}
+    normalizeProviderEvent(): NormalizedProviderEvent {
+      return { type: 'failed', providerCallId: '', timestamp: new Date() };
+    }
+    respondWithVoiceActions(_actions: VoiceAction[]): string {
+      return '<Response/>';
+    }
+    validateWebhookSignature(): boolean {
+      return true;
+    }
+  }
+
+  it('GET /api/v1/tts returns 400 when TTS not configured', async () => {
+    createProvidersFromInstances({
+      telephony: new StubTelephony(),
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+    });
+
+    const { GET } = await import('@/app/api/v1/tts/route');
+    const res = await GET(new NextRequest('http://localhost/api/v1/tts?text=Hello'));
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/v1/tts returns audio bytes when configured', async () => {
+    const tts: TTSPort = {
+      synthesize: async () => ({
+        contentType: 'audio/mpeg',
+        audio: new Uint8Array([1, 2, 3, 4]),
+      }),
+    };
+
+    createProvidersFromInstances({
+      telephony: new StubTelephony(),
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+      tts,
+    });
+
+    const { GET } = await import('@/app/api/v1/tts/route');
+    const res = await GET(new NextRequest('http://localhost/api/v1/tts?text=Hello&format=mp3'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('audio/mpeg');
+    const buf = new Uint8Array(await res.arrayBuffer());
+    expect(buf.length).toBe(4);
+    expect(Array.from(buf)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('GET /api/v1/tts returns audio when token is valid (no plain text required)', async () => {
+    vi.stubEnv('TTS_TOKEN_SECRET', 'secret');
+
+    const tts: TTSPort = {
+      synthesize: async (text) => ({
+        contentType: 'audio/mpeg',
+        audio: new TextEncoder().encode(text),
+      }),
+    };
+
+    createProvidersFromInstances({
+      telephony: new StubTelephony(),
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+      tts,
+    });
+
+    const payload = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        exp: Math.floor(Date.now() / 1000) + 30,
+        callSessionId: 'sess-1',
+        text: 'Token hello',
+        format: 'mp3',
+        voice: null,
+      }),
+      'utf8',
+    ).toString('base64url');
+    const { createHmac } = await import('crypto');
+    const sig = createHmac('sha256', 'secret').update(payload, 'utf8').digest('base64url');
+    const token = `${payload}.${sig}`;
+
+    const { GET } = await import('@/app/api/v1/tts/route');
+    const res = await GET(new NextRequest(`http://localhost/api/v1/tts?token=${encodeURIComponent(token)}`));
+    expect(res.status).toBe(200);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    expect(new TextDecoder().decode(buf)).toBe('Token hello');
+  });
+});
+
+describe('telephony events webhook (signature)', () => {
+  beforeEach(() => {
+    resetAll();
+    vi.unstubAllEnvs();
+    vi.stubEnv('NODE_ENV', 'production');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('returns 403 when signature is present but invalid', async () => {
+    createProvidersFromInstances({
+      telephony: {
+        async placeCall() {
+          return { providerCallId: 'stub' };
+        },
+        async hangupCall() {},
+        normalizeProviderEvent() {
+          return { type: 'completed', providerCallId: 'CA1', timestamp: new Date() };
+        },
+        respondWithVoiceActions() {
+          return '<Response/>';
+        },
+        validateWebhookSignature() {
+          return false;
+        },
+      },
+      brain: new MockBrainAdapter(),
+      callStore: new InMemoryCallStoreAdapter(),
+    });
+
+    const { POST } = await import('@/app/api/v1/telephony/events/route');
+    const body = new URLSearchParams({ CallSid: 'CA1', CallStatus: 'completed' }).toString();
+    const req = new NextRequest('http://localhost/api/v1/telephony/events?callSessionId=sess-1', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-twilio-signature': 'sig',
+      },
+      body,
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when signature header is missing in production', async () => {
+    const store = new InMemoryCallStoreAdapter();
+    createProvidersFromInstances({
+      telephony: {
+        async placeCall() {
+          return { providerCallId: 'stub' };
+        },
+        async hangupCall() {},
+        normalizeProviderEvent() {
+          return { type: 'completed', providerCallId: 'CA1', timestamp: new Date() };
+        },
+        respondWithVoiceActions() {
+          return '<Response/>';
+        },
+        validateWebhookSignature() {
+          return false;
+        },
+      },
+      brain: new MockBrainAdapter(),
+      callStore: store,
+    });
+
+    // Ensure the call session exists so the real controller can process the event.
+    await store.createSession({ id: 'sess-2', toNumber: '+15551234567' });
+
+    const { POST } = await import('@/app/api/v1/telephony/events/route');
+    const body = new URLSearchParams({ CallSid: 'CA1', CallStatus: 'completed' }).toString();
+    const req = new NextRequest('http://localhost/api/v1/telephony/events?callSessionId=sess-2', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(403);
   });
 });

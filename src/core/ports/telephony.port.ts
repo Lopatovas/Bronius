@@ -29,7 +29,16 @@ export interface TelephonyPort {
   placeCall(params: PlaceCallParams): Promise<PlaceCallResult>;
   hangupCall(providerCallId: string): Promise<void>;
   normalizeProviderEvent(rawPayload: Record<string, string>): NormalizedProviderEvent;
-  respondWithVoiceActions(actions: VoiceAction[]): string;
+  respondWithVoiceActions(
+    actions: VoiceAction[],
+    options?: {
+      webhookBaseUrl?: string;
+      callSessionId?: string;
+      useTts?: boolean;
+      ttsFormat?: 'mp3' | 'wav' | 'opus' | 'pcm' | 'flac';
+      ttsTokenSecret?: string;
+    },
+  ): string;
   validateWebhookSignature(
     signature: string,
     url: string,
