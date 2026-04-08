@@ -26,7 +26,8 @@ export class BrowserVoiceAdapter implements BrowserVoicePort {
 
     if (!text) throw new Error('Missing text');
 
-    const callSessionId = req.callSessionId || `browser-${generateId()}`;
+    // call_sessions.id is a UUID in Supabase. Keep this a plain UUID to remain compatible.
+    const callSessionId = req.callSessionId || generateId();
 
     const existing = await this.providers.callStore.getSession(callSessionId);
     if (!existing) {
