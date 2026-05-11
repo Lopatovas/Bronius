@@ -230,6 +230,19 @@ describe('tts API routes', () => {
   });
 });
 
+describe('browser call API routes', () => {
+  beforeEach(() => {
+    resetAll();
+    vi.unstubAllEnvs();
+  });
+
+  it('POST /api/v1/browser/start returns 400 when TTS not configured', async () => {
+    const { POST } = await import('@/app/api/v1/browser/start/route');
+    const res = await POST();
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('telephony events webhook (signature)', () => {
   beforeEach(() => {
     resetAll();

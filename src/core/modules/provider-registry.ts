@@ -14,6 +14,7 @@ export interface ProviderConfig {
   openaiApiKey?: string;
   mistralApiKey?: string;
   mistralModel?: string;
+  mistralSttModel?: string;
   mistralTtsModel?: string;
   mistralTtsVoiceId?: string;
   supabaseUrl?: string;
@@ -44,6 +45,7 @@ export function loadConfigFromEnv(): ProviderConfig {
     openaiApiKey: process.env.OPENAI_API_KEY,
     mistralApiKey: process.env.MISTRAL_API_KEY,
     mistralModel: process.env.MISTRAL_MODEL,
+    mistralSttModel: process.env.MISTRAL_STT_MODEL,
     mistralTtsModel: process.env.MISTRAL_TTS_MODEL,
     mistralTtsVoiceId: process.env.MISTRAL_TTS_VOICE_ID,
     supabaseUrl: process.env.SUPABASE_URL,
@@ -90,6 +92,12 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
     config.twilioAuthToken,
   );
 
+  let stt: STTPort | undefined;
+  if (config.mistralApiKey) {
+    const { MistralSTTAdapter } = await import('../../adapters/mistral-stt.adapter');
+    stt = new MistralSTTAdapter(config.mistralApiKey, config.mistralSttModel || 'voxtral-mini-latest');
+  }
+
   let tts: TTSPort | undefined;
   if (config.mistralApiKey && config.mistralTtsVoiceId) {
     const { MistralTTSAdapter } = await import('../../adapters/mistral-tts.adapter');
@@ -100,7 +108,7 @@ export async function createProviders(config: ProviderConfig): Promise<Registere
     );
   }
 
-  cachedProviders = { telephony, brain, callStore, tts };
+  cachedProviders = { telephony, brain, callStore, stt, tts };
   return cachedProviders;
 }
 
